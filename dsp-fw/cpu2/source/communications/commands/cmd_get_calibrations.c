@@ -1,0 +1,71 @@
+#include <math.h>
+#include <string.h>
+#include <stdio.h>
+#include "errors.h"
+#include "generic_definitions.h"
+
+#include "commands.h"
+
+#include "application.h"
+
+
+
+#define _CMD_ANSWER         (0x8000|0x5303)
+
+int16_t cmd_get_calibrations(uint8_t *error_category, uint8_t *error_code,uint16_t *command, uint8_t *data, uint16_t *size)
+{
+
+    int phase, i;
+    myfloat_t tmp;
+    uint16_t idx=0;
+
+
+    if (*size != 0 )
+    {
+        *error_category = ERROR(ERROR_CMD_PARAMS);
+        *error_code = ERROR(ERROR_CMD_PARAMS__CMD_SIZE_EXCEED_MAX);
+        return (COMMAND_RESULT__ERROR);
+    }
+
+    for (phase=1;phase<=3;phase++){
+        for(i=0;i<3;i++){
+            tmp.value = app.meter.phase[phase].cal_tx->current_cal[i];
+            data[idx++] = tmp.byte.b3;
+            data[idx++] = tmp.byte.b2;
+            data[idx++] = tmp.byte.b1;
+            data[idx++] = tmp.byte.b0;
+        }
+    }
+
+    for (phase=1;phase<=3;phase++){
+        for(i=0;i<3;i++){
+            tmp.value = app.meter.phase[phase].cal_tx->voltage_cal[i];
+            data[idx++] = tmp.byte.b3;
+            data[idx++] = tmp.byte.b2;
+            data[idx++] = tmp.byte.b1;
+            data[idx++] = tmp.byte.b0;
+        }
+    }
+
+    for (phase=1;phase<=3;phase++){
+        for(i=0;i<3;i++){
+            tmp.value = app.meter.phase[phase].cal_tx->alpha[i];
+            data[idx++] = tmp.byte.b3;
+            data[idx++] = tmp.byte.b2;
+            data[idx++] = tmp.byte.b1;
+            data[idx++] = tmp.byte.b0;
+        }
+    }
+
+
+
+
+    *error_category = ERROR(ERROR_CATEGORY_NONE);
+    *error_code = ERROR(ERROR_CODE_NONE);
+    *size = SIZE(idx);
+    *command = _CMD_ANSWER;
+    return (COMMAND_RESULT__SUCCESS);
+}
+
+
+

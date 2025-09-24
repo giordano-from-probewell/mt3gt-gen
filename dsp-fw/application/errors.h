@@ -1,0 +1,50 @@
+#ifndef ERRORS_H
+#define ERRORS_H
+
+enum error_categories_code_en
+{
+  ERROR_CATEGORY_NONE = 0,
+
+
+  ERROR_DATA_LINK_LAYER = 1,
+  ERROR_APPLICATION_LAYER = 2,
+
+  ERROR_CMD_PARAMS = 3,
+
+  ERROR_EQUIPMENT = 4,
+
+
+};
+
+
+enum error_codes_by_categories_en
+{
+
+  ERROR_CODE_NONE = 0,
+
+//  ERROR_DATA_LINK_LAYER = 1,
+  ERROR_DATA_LINK_LAYER__PKT_FRAME_SIZE             = 1,
+  ERROR_DATA_LINK_LAYER__PKT_INVALID_CHECKSUM       = 2,
+  ERROR_DATA_LINK_LAYER__PKT_EXCEEDS_MAXIMUM_SIZE   = 3,
+
+//  ERROR_APPLICATION_LAYER = 2,
+  ERROR_APP_LAYER__CMD_NOT_RECOGNIZED               = 1,
+  ERROR_APP_LAYER__CMD_NOT_AVAILABLE                = 2,
+  ERROR_APP_LAYER__CMD_INVALID_RETURN               = 3,
+
+
+//  ERROR_CMD_PARAMS = 3,
+  ERROR_CMD_PARAMS__CMD_INVALID_PARAM               = 1,
+  ERROR_CMD_PARAMS__CMD_WRONG_PARAMS_NUMBER         = 2,
+  ERROR_CMD_PARAMS__CMD_SIZE_EXCEED_MAX             = 3,
+
+
+  //  ERROR_EQUIPMENT = 4,
+  ERROR_EQUIPMENT__AMPLIFIER_IS_BUSY                 = 1,
+
+};
+
+
+
+
+#endif /* ERRORS_H */
