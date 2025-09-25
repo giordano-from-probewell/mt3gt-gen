@@ -86,8 +86,6 @@
 
 
 
-
-
 void app_init_cpu1(application_t *app);
 void app_run_cpu1(application_t *app);
 

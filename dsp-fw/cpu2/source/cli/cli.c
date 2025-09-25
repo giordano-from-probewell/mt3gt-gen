@@ -39,6 +39,7 @@ cli_transmission_t _cli_tx;
 cli_menu_t _cli_map[] = {
                                 { .initialized = NULL, .tx = &(_cli_tx) ,.handler = cli_main_menu_handler,        .menu_key = '?' ,},
                                 { .initialized = NULL, .tx = &(_cli_tx) ,.handler = cli_measures_menu_handler,    .menu_key = 'm' ,},
+                                { .initialized = NULL, .tx = &(_cli_tx) ,.handler = cli_measures_menu_handler,    .menu_key = 'c' ,},
 };
 
 

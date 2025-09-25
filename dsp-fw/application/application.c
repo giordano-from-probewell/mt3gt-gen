@@ -61,6 +61,8 @@ calibration_t cal_c_tx;
 #pragma DATA_SECTION(app, "app_data_cpu1");
 application_t app;
 
+
+#ifdef CPU1
 bool flag_new_range = false;
 int8_t new_range = 0;
 
@@ -69,7 +71,11 @@ int8_t new_cal_parameter = 0;
 int8_t new_cal_phase = 0;
 int8_t new_cal_index = 0;
 
+bool flag_start_test = false;
+bool flag_reset_test = false;
 
+
+#endif
 
 
 

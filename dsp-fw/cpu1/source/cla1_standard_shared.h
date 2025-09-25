@@ -114,15 +114,20 @@ typedef struct {
 } ledtest_rt_t;
 
 typedef struct cla_meter_test_st {
-    float32_t energy_dnwh[512];
-    int32_t energy_cycle_uwh;    // accumulated active energy for the LED, in uWh (integer)
-    int32_t energy_acc_uwh;
-    int32_t energy_acc_wh;
+    float32_t energy_dnwh_a[512];
+    int32_t energy_cycle_uwh_a;    // accumulated active energy for the LED, in uWh (integer)
+    int32_t energy_acc_uwh_a;
+    int32_t energy_acc_wh_a;
 
-    float32_t energy_dnwh_copy[512];
-    int32_t energy_cycle_uwh_copy;    // accumulated active energy for the LED, in uWh (integer)
-    int32_t energy_acc_uwh_copy;
-    int32_t energy_acc_wh_copy;
+    float32_t energy_dnwh_b[512];
+    int32_t energy_cycle_uwh_b;    // accumulated active energy for the LED, in uWh (integer)
+    int32_t energy_acc_uwh_b;
+    int32_t energy_acc_wh_b;
+
+    float32_t energy_dnwh_c[512];
+    int32_t energy_cycle_uwh_c;    // accumulated active energy for the LED, in uWh (integer)
+    int32_t energy_acc_uwh_c;
+    int32_t energy_acc_wh_c;
 
 } cla_meter_test_t;
 

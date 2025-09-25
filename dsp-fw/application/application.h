@@ -23,6 +23,11 @@
 #include "buzzer.h"
 
 
+#define IPC_CMD_SET_CAL             0x10
+#define IPC_CMD_SET_CURRENT_RANGE   0x11
+#define IPC_CMD_START_TEST          0x12
+#define IPC_CMD_RESET_TEST          0x13
+
 
 /************************
  * Hardware Definitions *
@@ -234,6 +239,7 @@ typedef struct phase_st
     analog_input_t *current_input;
     calibration_t *cal_rx;
     calibration_t *cal_tx;
+    int8_t current_cal_index;
     bool flag_new_cal_rx;
 
     struct{
@@ -282,10 +288,18 @@ typedef struct application_st
 
 extern const fw_data_t fw_info;
 extern application_t app;
+
+extern bool flag_new_range;
+extern int8_t new_range;
+
 extern bool flag_new_calibration;
 extern int8_t new_cal_parameter;
 extern int8_t new_cal_phase;
 extern int8_t new_cal_index;
+
+extern bool flag_start_test;
+extern bool flag_reset_test;
+
 
 generic_status_t app_init(application_t * this_app);
 generic_status_t app_run(application_t * this_app);

@@ -10,6 +10,7 @@
 #include "application.h"
 
 #include "amplifier.h"
+#include "ipc_simple.h"
 
 #define _CMD_REQUEST_AMOUNT (1)
 #define _CMD_ANSWER_AMOUNT  (0)
@@ -72,21 +73,7 @@ int16_t cmd_current_range(uint8_t *error_category, uint8_t *error_code,uint16_t 
     }
 
 
-    app.meter.analog_input[0].config.flag_new_range = true;
-    app.meter.analog_input[0].config.current_range = range;
-
-    app.meter.analog_input[2].config.flag_new_range = true;
-    app.meter.analog_input[2].config.current_range = range;
-
-    app.meter.analog_input[4].config.flag_new_range = true;
-    app.meter.analog_input[4].config.current_range = range;
-
-    app.meter.analog_input[6].config.flag_new_range = true;
-    app.meter.analog_input[6].config.current_range = range;
-
-
-    uint8_t new_range = range;
-    ipc_send_to_cpu1(0x11, &range, 1);
+    ipc_send_to_cpu1(IPC_CMD_SET_CURRENT_RANGE, &range, 1);
 
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);

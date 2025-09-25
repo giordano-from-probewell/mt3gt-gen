@@ -1,0 +1,50 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "F28379D dual-core",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo":
+                {
+                    "name": "cpu1",
+                    "resourceId": "/cpu1"
+                },
+  
+            "connections": [
+                {
+                    "name": "Texas Instruments XDS2xx USB Debug Probe",
+                    "cores": [
+                        {
+                            "name": "C28xx_CPU1",
+                            "program": "C:/GITHUB/MT3GT-PW/mt3gt-standard-meter/dsp-fw/cpu1/CPU1_FLASH/cpu1.out"
+                        },
+                        {
+                            "name": "C28xx_CPU2",
+                            "program": "C:/GITHUB/MT3GT-PW/mt3gt-standard-meter/dsp-fw/cpu2/CPU2_FLASH/cpu2.out"
+                        }
+                    ]
+                }
+            ],
+            "groupInfo": [
+                {
+                    "name": "both",
+                    "syncMode": true,
+                    "cores": [
+                        "Texas Instruments XDS2xx USB Debug Probe/C28xx_CPU1",
+                        "Texas Instruments XDS2xx USB Debug Probe/C28xx_CPU2"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "cpu1",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "cpu1",
+                "resourceId": "/cpu1"
+            }
+        }
+    ]
+}

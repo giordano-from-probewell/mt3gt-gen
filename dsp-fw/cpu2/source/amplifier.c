@@ -112,11 +112,11 @@ void amplifier_mgr_poll(amplifier_manager_t* mgr, my_time_t now)
         ada4254_status_t st = ada4254_set_gain_poll(&mgr->gain_ctx, now);
         if (st != ADA4254_STATUS_NOT_INITIALIZED) {
             // end (OK r NOK). Go to next
-            cli_update_display_raw((char*)mgr->table[mgr->current_channel].label);
-            if(st == ADA4254_STATUS_OK)
-                cli_update_display_raw(" Ok\n\r");
-            else
-                cli_update_display_raw(" Nok\n\r");
+//            cli_update_display_raw((char*)mgr->table[mgr->current_channel].label);
+//            if(st == ADA4254_STATUS_OK)
+//                cli_update_display_raw(" Ok\n\r");
+//            else
+//                cli_update_display_raw(" Nok\n\r");
             mgr->need_gain[mgr->current_channel] = false;
             mgr->current_channel++;
             mgr->state = AMP_MGR_SETGAIN_NEXT;
@@ -124,7 +124,7 @@ void amplifier_mgr_poll(amplifier_manager_t* mgr, my_time_t now)
         break;
     }
     case AMP_MGR_INITIATED:
-        cli_update_display_raw("Amplifiers ready!\n\r");
+        //cli_update_display_raw("Amplifiers ready!\n\r");
         mgr->state = AMP_MGR_DONE;
         break;
 

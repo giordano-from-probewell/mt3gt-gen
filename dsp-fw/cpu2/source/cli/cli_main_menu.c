@@ -18,7 +18,7 @@ static void _handle_menu_1(cli_menu_t *menu, const my_time_t time_actual, int16_
                   "\r\n"
                   "  ___________________________  \r\n"
                   " |Main Menu [?]              | \r\n"
-                  " |Measures :       [m]       | \r\n"
+                  " |Measures :       [m|c]     | \r\n"
                   " |                           | \r\n"
                   " |LOG Menu:        [l]       | \r\n"
                   " |___________________________| \r\n"

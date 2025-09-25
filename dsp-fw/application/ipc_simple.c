@@ -141,12 +141,32 @@ void ipc_rx_service_cpu1(void)
     if (ipc_try_receive_from_cpu2(&cmd, pl, &len)) {
         ipc_on_cmd_from_cpu2(cmd, pl, len);
 
-        if(cmd == 0x10)
+
+        if(cmd == IPC_CMD_SET_CURRENT_RANGE)
+        {
+            flag_new_range = true;
+            new_range = pl[0];
+
+        }
+
+        if(cmd == IPC_CMD_SET_CAL)
         {
             flag_new_calibration = true;
             new_cal_parameter = pl[0];
             new_cal_phase = pl[1];
             new_cal_index = pl[2];
+
+        }
+
+        if(cmd == IPC_CMD_RESET_TEST)
+        {
+            flag_reset_test = true;
+
+        }
+
+        if(cmd == IPC_CMD_START_TEST)
+        {
+            flag_start_test = true;
 
         }
     }

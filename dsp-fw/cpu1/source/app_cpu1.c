@@ -38,6 +38,9 @@
 
 
 
+
+
+
 void _app_gpio_init(void);
 
 void _init_phase(phase_t * phase, phase_desc_t desc, analog_input_t * voltge_input, analog_input_t * current_input  );
@@ -229,8 +232,6 @@ bool flag_f2 = false;
 bool flag_f3 = false;
 
 
-bool flag_test_begin = false;
-
 
 
 extern IPC_MessageQueue_t messageQueue;
@@ -272,14 +273,6 @@ void app_run_cpu1(application_t *app)
     if(flag_f3){
         f = cla_phase_a.w_cycle;
         led_pwm_set_frequency_fast(f);
-    }
-
-
-    if(flag_test_begin){
-
-        flag_test_begin = false;
-
-        ledtest_begin(&cfg);
     }
 
 
@@ -326,7 +319,9 @@ void app_run_cpu1(application_t *app)
             app->meter.phase[3].cal_tx->voltage_cal[k]   =   cla_phase_c.cal.voltage_cal[k];
             app->meter.phase[3].cal_tx->alpha[k]         =   cla_phase_c.cal.alpha[k]      ;
         }
-
+        app->meter.phase[1].current_cal_index = 1;
+        app->meter.phase[2].current_cal_index = 1;
+        app->meter.phase[3].current_cal_index = 1;
 
         // Enable Global Interrupt (INTM) and real time interrupt (DBGM)
         EINT;
@@ -338,21 +333,70 @@ void app_run_cpu1(application_t *app)
 
     case APP_STATE_RUNNING:
 
+        GPIO_writePin(GPIO_DEBUG_2,1);
         // pegar o ciclo pronto
+
+
+        if(flag_start_test){
+
+            //    cla_test.flag_testing = false;
+            //    cla_test.led_energy = 0.0f;
+            //    cla_test.energy_measured = 0.0f;
+            //    cla_test.energy_acc_uwh = 0;
+            //    cla_test.energy_acc_wh = 0;
+            //    cla_test.pulses_generated = 0;
+            //    cla_test.flag_test_done = false;
+            //    cla_test.pulses_expected = data[i+0];
+            //    cla_test.flag_start_test = true;
+
+
+            cfg.debounce_us           = 1e-6;
+            cfg.kh_imp_per_kwh        = 10000;
+            cfg.max_test_ms           = 1e6;
+            cfg.start_on_first_pulse  = 1;
+            cfg.target_pulses = 10;
+
+            ledtest_begin(&cfg);
+
+            flag_start_test = false;
+        }
+
+        if(meter_test.state == LEDTEST_DONE){
+
+            ledtest_begin(&cfg);
+        }
+
+        if(flag_reset_test){
+
+
+            //    cla_test.flag_testing = false;
+            //    cla_test.flag_start_test = false;
+            //    cla_test.led_energy = 0.0f;
+            //    cla_test.energy_measured = 0.0f;
+            //    cla_test.energy_acc_uwh = 0;
+            //    cla_test.energy_acc_wh = 0;
+            //    cla_test.pulses_generated = 0;
+            //    cla_test.flag_test_done = false;
+
+            flag_reset_test = false;
+        }
+
+
+
         if (flag_zc)
         {
-
-
             int k;
-
             {
 
-                if(app->meter.phase[1].current_input->ada_channel.input_gain == IN_GAIN_8)
-                    cla_phase_a.cal.current_cal_index = 0;
-                if(app->meter.phase[1].current_input->ada_channel.input_gain == IN_GAIN_1)
-                    cla_phase_a.cal.current_cal_index = 1;
-                if(app->meter.phase[1].current_input->ada_channel.input_gain == IN_GAIN_0_125)
-                    cla_phase_a.cal.current_cal_index = 2;
+                if( flag_new_range ) {
+
+                    cla_phase_a.cal.current_cal_index = new_range;
+                    cla_phase_b.cal.current_cal_index = new_range;
+                    cla_phase_c.cal.current_cal_index = new_range;
+                    app->meter.phase[1].current_cal_index = new_range;
+                    app->meter.phase[2].current_cal_index = new_range;
+                    app->meter.phase[3].current_cal_index = new_range;
+                }
 
                 for (k = 0; k<3; k++)
                 {
@@ -413,7 +457,6 @@ void app_run_cpu1(application_t *app)
             int last = ((cycle_desc.start + cnt - 1) & RING_MASK);  // índice da ÚLTIMA amostra
             float32_t dx = (float32_t)cnt / (float32_t)SPLINE_OUTPUT_SIZE;         // mapeia [0..cnt)
 
-            //GPIO_writePin(GPIO_DEBUG_2,1);
             {
                 // calcular os coeficientes a partir do ring
                 calc_spline_coef_ring_idx((float32_t*)ring_va,   // ring é volatile -> faça cast
@@ -541,13 +584,10 @@ void app_run_cpu1(application_t *app)
 
             flag_zc = false;
         }
-        //GPIO_writePin(GPIO_DEBUG_2,0);
 
-        if(meter_test.state == LEDTEST_DONE){
 
-            ledtest_begin(&cfg);
-        }
 
+        GPIO_writePin(GPIO_DEBUG_2,0);
 
         break;
 
@@ -571,7 +611,7 @@ void _app_gpio_init(void)
     GPIO_setDirectionMode(GPIO_DEBUG_1, GPIO_DIR_MODE_OUT);
     GPIO_setQualificationMode(GPIO_DEBUG_1, GPIO_QUAL_ASYNC);
     GPIO_setPinConfig(GPIO_DEBUG_1_CONFIG);
-    GPIO_setMasterCore(GPIO_DEBUG_1, GPIO_CORE_CPU1);
+    GPIO_setMasterCore(GPIO_DEBUG_1, GPIO_CORE_CPU1_CLA1);
 
     GPIO_setPadConfig(GPIO_DEBUG_2, GPIO_PIN_TYPE_STD);
     GPIO_setDirectionMode(GPIO_DEBUG_2, GPIO_DIR_MODE_OUT);
@@ -1545,96 +1585,96 @@ void ledtest_begin(const ledtest_cfg_t *cfg)
 
 static inline int64_t snapshot_cycle_energy_uwh_stable(void)
 {
-    int64_t uwh1, uwh2;
+    volatile int64_t uwha1, uwha2;
+    volatile int64_t uwhb1, uwhb2;
+    volatile int64_t uwhc1, uwhc2;
     do {
-        uwh1 = (int64_t)cla_test_aux.energy_cycle_uwh;   // 1ª leitura
-        uwh2 = (int64_t)cla_test_aux.energy_cycle_uwh;   // 2ª leitura
-    } while (uwh1 != uwh2); // repete até coerente
-
-    return uwh1 ;
+        uwha1 = (int64_t)cla_test_aux.energy_cycle_uwh_a;
+        uwha2 = (int64_t)cla_test_aux.energy_cycle_uwh_a;
+    } while (uwha1 != uwha2);
+    do {
+        uwhb1 = (int64_t)cla_test_aux.energy_cycle_uwh_b;
+        uwhb2 = (int64_t)cla_test_aux.energy_cycle_uwh_b;
+    } while (uwha1 != uwha2);
+    do {
+        uwhc1 = (int64_t)cla_test_aux.energy_cycle_uwh_c;
+        uwhc2 = (int64_t)cla_test_aux.energy_cycle_uwh_c;
+    } while (uwha1 != uwha2);
+    return uwha1 + uwhb1 + uwhc1;
 }
 
 
 static inline int64_t snapshot_energy_uwh_stable(void)
 {
-    int64_t uwh1, uwh2;
-    do {
-        uwh1 = (int64_t)cla_test_aux.energy_acc_wh * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh;   // 1ª leitura
-        uwh2 = (int64_t)cla_test_aux.energy_acc_wh * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh;   // 2ª leitura
-    } while (uwh1 != uwh2); // repete até coerente
+    volatile int64_t uwha1, uwha2;
+    volatile int64_t uwhb1, uwhb2;
+    volatile int64_t uwhc1, uwhc2;
 
-    return uwh1 ;
+    do {
+        uwha1 = (int64_t)cla_test_aux.energy_acc_wh_a * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh_a;
+        uwha2 = (int64_t)cla_test_aux.energy_acc_wh_a * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh_a;
+    } while (uwha1 != uwha2);
+    do {
+        uwhb1 = (int64_t)cla_test_aux.energy_acc_wh_b * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh_b;
+        uwhb2 = (int64_t)cla_test_aux.energy_acc_wh_b * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh_b;
+    } while (uwha1 != uwha2);
+    do {
+        uwhc1 = (int64_t)cla_test_aux.energy_acc_wh_c * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh_c;
+        uwhc2 = (int64_t)cla_test_aux.energy_acc_wh_c * 1000000ULL+ (int64_t)cla_test_aux.energy_acc_uwh_c;
+    } while (uwha1 != uwha2);
+    return uwha1 + uwhb1 + uwhc1;
 }
 
 
-int test = 0;
+
 
 
 static inline float32_t snapshot_energy_dnwh_stable(void)
 {
-    float32_t dnwh1, dnwh2;
-
-    if(test==0){
-        do {
-            dnwh1 =  cla_test_aux.energy_dnwh[meter_test.sample_index_new];   // 1ª leitura
-            dnwh2 =  cla_test_aux.energy_dnwh[meter_test.sample_index_new];   // 2ª leitura
-        } while (dnwh1 != dnwh2); // repete até coerente
-    }
-    else if(test==1)
-    {
-        do {
-            dnwh1 =  cla_test_aux.energy_dnwh[meter_test.sample_index_old];   // 1ª leitura
-            dnwh2 =  cla_test_aux.energy_dnwh[meter_test.sample_index_old];   // 2ª leitura
-        } while (dnwh1 != dnwh2); // repete até coerente
-    }
-    if(test==2){
-
-        int index = meter_test.sample_index_new-1;
-        if(index<0)index = 0;
+    volatile float32_t dnwha1, dnwha2;
+    volatile float32_t dnwhb1, dnwhb2;
+    volatile float32_t dnwhc1, dnwhc2;
 
         do {
-            dnwh1 =  cla_test_aux.energy_dnwh[index];   // 1ª leitura
-            dnwh2 =  cla_test_aux.energy_dnwh[index];   // 2ª leitura
-        } while (dnwh1 != dnwh2); // repete até coerente
-    }
-    if(test==3){
-
-        int index = meter_test.sample_index_new+1;
-        if(index>511)index = 511;
-
+            dnwha1 =  cla_test_aux.energy_dnwh_a[meter_test.sample_index_new];
+            dnwha2 =  cla_test_aux.energy_dnwh_a[meter_test.sample_index_new];
+        } while (dnwha1 != dnwha2);
         do {
-            dnwh1 =  cla_test_aux.energy_dnwh[index];   // 1ª leitura
-            dnwh2 =  cla_test_aux.energy_dnwh[index];   // 2ª leitura
-        } while (dnwh1 != dnwh2); // repete até coerente
-    }
+            dnwhb1 =  cla_test_aux.energy_dnwh_b[meter_test.sample_index_new];
+            dnwhb2 =  cla_test_aux.energy_dnwh_b[meter_test.sample_index_new];
+        } while (dnwhb1 != dnwhb2);
+        do {
+            dnwhc1 =  cla_test_aux.energy_dnwh_c[meter_test.sample_index_new];
+            dnwhc2 =  cla_test_aux.energy_dnwh_c[meter_test.sample_index_new];
+        } while (dnwhc1 != dnwhc2);
 
-    return (float32_t)dnwh1;
+    return (float32_t) dnwha1 + dnwhb1 + dnwhc1;
 }
 
 
 
 
 
-float32_t mark[100];
-float32_t error[100];
-float32_t energy[100];
-float32_t energy1[100];
-float32_t frac1[100];
-float32_t frac2[100];
-float32_t energia1[100];
-float32_t energia2[100];
-float32_t ticks[100];
-
-
-float32_t index[100];
-float32_t index1[100];
-float32_t numciclos[100];
-int num_ciclo=0;
-
+//float32_t mark[100];
+//float32_t error[100];
+//float32_t energy[100];
+//float32_t energy1[100];
+//float32_t frac1[100];
+//float32_t frac2[100];
+//float32_t energia1[100];
+//float32_t energia2[100];
+//float32_t ticks[100];
+//
+//
+//float32_t index[100];
+//float32_t index1[100];
+//float32_t numciclos[100];
+//int num_ciclo=0;
+//
 float32_t measurede_energy;
-
-int k=0;
-int j=0;
+//
+//int k=0;
+//int j=0;
 
 
 
@@ -1661,32 +1701,30 @@ void led_pulse_isr(void)
 
         if(meter_test.pulse_count == 0)
         {
-            GPIO_writePin(GPIO_DEBUG_1,1);
             meter_test.ref_energy_uWh = 0;
             meter_test.flag_first_pulse = true;
 
         }
         else if (meter_test.pulse_count >= meter_test.target_pulses)
         {
-            GPIO_writePin(GPIO_DEBUG_1,0);
             meter_test.flag_last_pulse = true;
             meter_test.ref_energy_uWh += meter_test.led_energy_comp_uWh;
 
 
-            error[k] = meter_test.error_pct;
-            energy[k] = (float32_t)meter_test.energy_test_init_uwh;
-            energy1[k] = (float32_t)meter_test.energy_test_end_uwh;
-            frac1[k] = meter_test.frac_first_uWh;
-            frac2[k] = meter_test.frac_last_uWh;
-            energia1[k] = measurede_energy;
-            energia2[k] = (float)cla_phase_a.energy.uwh_acc;
-            ticks[k] = (float)meter_test.test_ticks;
-            index[k] = (float)meter_test.sample_index_old;
-            index1[k] = (float)meter_test.sample_index_new;
-            numciclos[k] = (float) num_ciclo;
-            k++;
-            if(k>=100)
-                k=0;
+//            error[k] = meter_test.error_pct;
+//            energy[k] = (float32_t)meter_test.energy_test_init_uwh;
+//            energy1[k] = (float32_t)meter_test.energy_test_end_uwh;
+//            frac1[k] = meter_test.frac_first_uWh;
+//            frac2[k] = meter_test.frac_last_uWh;
+//            energia1[k] = measurede_energy;
+//            energia2[k] = (float)cla_phase_a.energy.uwh_acc;
+//            ticks[k] = (float)meter_test.test_ticks;
+//            index[k] = (float)meter_test.sample_index_old;
+//            index1[k] = (float)meter_test.sample_index_new;
+//            numciclos[k] = (float) num_ciclo;
+//            k++;
+//            if(k>=100)
+//                k=0;
 
 
 
@@ -1712,22 +1750,21 @@ void led_zc_isr(void)
     int64_t base_uwh = 0;
     int64_t cycle_uwh = 0;
 
-    mark[k] = 0;
-
+//    mark[k] = 0;
     measurede_energy = 0;
+//    num_ciclo++;
 
     if (meter_test.state != LEDTEST_RUNNING)
     {
         return;
     }
 
-    num_ciclo++;
+
 
     if (meter_test.flag_first_zc)
     {
-        GPIO_writePin(GPIO_DEBUG_2,1);
-        num_ciclo= 0;
-        mark[k] = 111;
+//        num_ciclo= 0;
+//        mark[k] = 111;
         meter_test.sample_index_old = (meter_test.test_ticks * 512) / meter_test.cycle_ticks;
         if (meter_test.sample_index_old >= 512) meter_test.sample_index_old = 511;
         if (meter_test.sample_index_old < 0) meter_test.sample_index_old = 0;
@@ -1750,8 +1787,7 @@ void led_zc_isr(void)
     }
     else if (meter_test.flag_last_zc)
     {
-        GPIO_writePin(GPIO_DEBUG_2,0);
-        mark[k] = 222;
+        //mark[k] = 222;
         meter_test.sample_index_old = (meter_test.test_ticks * 512) / meter_test.cycle_ticks;
         if (meter_test.sample_index_old >= 512) meter_test.sample_index_old = 511;
         if (meter_test.sample_index_old < 0) meter_test.sample_index_old = 0;
@@ -1808,7 +1844,8 @@ __interrupt void dmaADSchannels(void)
     float32_t fvoltage_a, fvoltage_b, fvoltage_c, fvoltage_n;
     float32_t fcurrent_a, fcurrent_b, fcurrent_c, fcurrent_n;
 
-    //GPIO_writePin(GPIO_DEBUG_0,1);
+    GPIO_writePin(GPIO_DEBUG_0,1);
+
     // current samples delayed by delay_amount
     current_n = (long)ADS_values_DMA[0];
     voltage_n = (long)ADS_values_DMA[1];
@@ -1872,6 +1909,11 @@ __interrupt void dmaADSchannels(void)
     if (zc_process_sample(&zcA, fvoltage_a, &cla_phase_a.frequency, &cla_phase_a.period))
     {
 
+        cla_phase_b.frequency=cla_phase_a.frequency;
+        cla_phase_c.frequency=cla_phase_a.frequency;
+
+        cla_phase_b.period=cla_phase_a.period;
+        cla_phase_c.period=cla_phase_a.period;
 
         if( cla_phase_a.frequency > 20.0 && cla_phase_a.frequency < 80.0)
         {
@@ -1889,22 +1931,12 @@ __interrupt void dmaADSchannels(void)
             //led_pwm_set_frequency_fast(f);
 
 
-            if(meter_test.flag_testing){
-                GPIO_writePin(GPIO_DEBUG_0,0);
-                GPIO_writePin(GPIO_DEBUG_0,1);
-            }
-            else
-            {
-                GPIO_writePin(GPIO_DEBUG_0,1);
-                GPIO_writePin(GPIO_DEBUG_0,0);
-            }
 
             if( meter_test.flag_first_pulse )
             {
                 meter_test.cycle_samples =  cycle_desc.count;
 
                 meter_test.flag_testing = true;
-                GPIO_writePin(GPIO_DEBUG_0,1);
                 meter_test.flag_first_zc = true;
                 meter_test.flag_first_pulse = false;
             }
@@ -1913,7 +1945,6 @@ __interrupt void dmaADSchannels(void)
                 meter_test.cycle_samples =  cycle_desc.count;
 
                 meter_test.flag_testing = false;
-                GPIO_writePin(GPIO_DEBUG_0,0);
                 meter_test.flag_last_zc = true;
                 meter_test.flag_last_pulse = false;
             }
@@ -1945,7 +1976,7 @@ __interrupt void dmaADSchannels(void)
     //        GPIO_writePin(GPIO_DEBUG_0,1);
     //        GPIO_writePin(GPIO_DEBUG_0,0);
     //    }
-    //GPIO_writePin(GPIO_DEBUG_0,0);
+    GPIO_writePin(GPIO_DEBUG_0,0);
     PieCtrlRegs.PIEACK.all = PIEACK_GROUP7; // Clear interrupt flag
 
 }
@@ -2002,11 +2033,9 @@ uint32_t g_debounce_us = 100;//100ms
 
 interrupt void xint1_isr(void)
 {
-    //GPIO_writePin(GPIO_DEBUG_1,1);
     led_pulse_isr();
     GPIO_writePin(EPWM_LED_GPIO,1);
 
-    //GPIO_writePin(GPIO_DEBUG_1,0);
 
     //
     //    int i;

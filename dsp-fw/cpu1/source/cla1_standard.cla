@@ -245,9 +245,9 @@ void accumulate_energy(cla_phase_t *cla_phase)
 __interrupt void Cla1Task1 ( void )
 {
 
-//    #if (CLA_DEBUG==1)
-//        __mdebugstop();
-//    #endif
+//#if (CLA_DEBUG==1)
+//    __mdebugstop();
+//#endif
 
     int16_t i;
 
@@ -264,15 +264,15 @@ __interrupt void Cla1Task1 ( void )
         cla_phase_a.i = i_vector[i];
         analyze_phase_run(&cla_phase_a, &cla_phase_a, true);
         delta_nWh += (cla_phase_a.w_inst * mult);
-        cla_test_aux.energy_dnwh[i] = delta_nWh;
+        cla_test_aux.energy_dnwh_a[i] = delta_nWh;
     }
 
     analyze_phase_calc(&cla_phase_a);
     accumulate_energy(&cla_phase_a);
 
-    cla_test_aux.energy_cycle_uwh = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
-    cla_test_aux.energy_acc_uwh += cla_test_aux.energy_cycle_uwh;
-    normalize_signed_energy (&cla_test_aux.energy_acc_uwh,   &cla_test_aux.energy_acc_wh);
+    cla_test_aux.energy_cycle_uwh_a = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
+    cla_test_aux.energy_acc_uwh_a += cla_test_aux.energy_cycle_uwh_a;
+    normalize_signed_energy (&cla_test_aux.energy_acc_uwh_a,   &cla_test_aux.energy_acc_wh_a);
 
     GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 
@@ -284,26 +284,34 @@ __interrupt void Cla1Task1 ( void )
 //
 __interrupt void Cla1Task2 ( void )
 {
-#if (CLA_DEBUG==1)
-    __mdebugstop();
-#endif
+//#if (CLA_DEBUG==1)
+//    __mdebugstop();
+//#endif
 
     int16_t i;
 
     GpioDataRegs.GPASET.bit.GPIO15 = 1; //GPIO_DEBUG_1
+
+    float delta_nWh = 0.0f;
+
+    float mult =  (cla_phase_b.period*NWH_PER_WATTSECOND)/512.0;
+
     analyze_phase_reset(&cla_phase_b);
     for(i=0;i<512;i++)
     {
         cla_phase_b.v = v_vector[i];
         cla_phase_b.i = i_vector[i];
-        analyze_phase_run(&cla_phase_b, &cla_phase_a, false);
-
-
+        analyze_phase_run(&cla_phase_b, &cla_phase_a, true);
+        delta_nWh += (cla_phase_b.w_inst * mult);
+        cla_test_aux.energy_dnwh_b[i] = delta_nWh;
     }
+
     analyze_phase_calc(&cla_phase_b);
     accumulate_energy(&cla_phase_b);
 
-    cla_test_aux.energy_cycle_uwh += cla_phase_b.energy.cycle_uwh;
+    cla_test_aux.energy_cycle_uwh_b = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
+    cla_test_aux.energy_acc_uwh_b += cla_test_aux.energy_cycle_uwh_b;
+    normalize_signed_energy (&cla_test_aux.energy_acc_uwh_b,   &cla_test_aux.energy_acc_wh_b);
 
     GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 }
@@ -313,23 +321,34 @@ __interrupt void Cla1Task2 ( void )
 //
 __interrupt void Cla1Task3 ( void )
 {
-#if (CLA_DEBUG==1)
-    __mdebugstop();
-#endif
+//#if (CLA_DEBUG==1)
+//    __mdebugstop();
+//#endif
+
     int16_t i;
+
     GpioDataRegs.GPASET.bit.GPIO15 = 1; //GPIO_DEBUG_1
+
+    float delta_nWh = 0.0f;
+
+    float mult =  (cla_phase_c.period*NWH_PER_WATTSECOND)/512.0;
+
     analyze_phase_reset(&cla_phase_c);
     for(i=0;i<512;i++)
     {
         cla_phase_c.v = v_vector[i];
         cla_phase_c.i = i_vector[i];
-        analyze_phase_run(&cla_phase_c, &cla_phase_a, false);
-
+        analyze_phase_run(&cla_phase_c, &cla_phase_a, true);
+        delta_nWh += (cla_phase_c.w_inst * mult);
+        cla_test_aux.energy_dnwh_c[i] = delta_nWh;
     }
+
     analyze_phase_calc(&cla_phase_c);
     accumulate_energy(&cla_phase_c);
 
-    cla_test_aux.energy_cycle_uwh += cla_phase_b.energy.cycle_uwh;
+    cla_test_aux.energy_cycle_uwh_c = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
+    cla_test_aux.energy_acc_uwh_c += cla_test_aux.energy_cycle_uwh_c;
+    normalize_signed_energy (&cla_test_aux.energy_acc_uwh_c,   &cla_test_aux.energy_acc_wh_c);
 
     GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 }
@@ -425,9 +444,15 @@ __interrupt void Cla1Task8 ( void )
     analyze_phase_init(&cla_phase_b);
     analyze_phase_init(&cla_phase_c);
 
-    cla_test_aux.energy_acc_uwh = 0;
-    cla_test_aux.energy_cycle_uwh = 0;
-    cla_test_aux.energy_acc_wh = 0;
+    cla_test_aux.energy_acc_uwh_a = 0;
+    cla_test_aux.energy_cycle_uwh_a = 0;
+    cla_test_aux.energy_acc_wh_a = 0;
+    cla_test_aux.energy_acc_uwh_b = 0;
+    cla_test_aux.energy_cycle_uwh_b = 0;
+    cla_test_aux.energy_acc_wh_b = 0;
+    cla_test_aux.energy_acc_uwh_c = 0;
+    cla_test_aux.energy_cycle_uwh_c = 0;
+    cla_test_aux.energy_acc_wh_c = 0;
 
 
 

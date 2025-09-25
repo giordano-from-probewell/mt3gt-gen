@@ -8,7 +8,7 @@
 #include "commands.h"
 
 #include "application.h"
-//#include "cla1_standard_shared.h"
+#include "ipc_simple.h"
 
 #define _CMD_REQUEST_AMOUNT (0)
 #define _CMD_ANSWER_AMOUNT  (0)
@@ -28,14 +28,10 @@ int16_t cmd_reset_test(uint8_t *error_category, uint8_t *error_code,uint16_t *co
     }
 
 
-//    cla_test.flag_testing = false;
-//    cla_test.flag_start_test = false;
-//    cla_test.led_energy = 0.0f;
-//    cla_test.energy_measured = 0.0f;
-//    cla_test.energy_acc_uwh = 0;
-//    cla_test.energy_acc_wh = 0;
-//    cla_test.pulses_generated = 0;
-//    cla_test.flag_test_done = false;
+    int8_t x=0;
+    ipc_send_to_cpu1(IPC_CMD_RESET_TEST, &x, 1);
+
+
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);
     *error_code = ERROR(ERROR_CODE_NONE);
