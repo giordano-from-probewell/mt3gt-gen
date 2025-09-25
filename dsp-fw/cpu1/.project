@@ -28,10 +28,10 @@
 		<link>
 			<name>source/application</name>
 			<type>2</type>
-			<locationURI>APPLICATION_LOC</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/application</locationURI>
 		</link>
 		<link>
-			<name>source/common_librairies</name>
+			<name>source/common_libraries</name>
 			<type>2</type>
 			<locationURI>COMMON_LIBRARIES</locationURI>
 		</link>
@@ -43,11 +43,11 @@
 		</variable>
 		<variable>
 			<name>CLAMATH_ROOT</name>
-			<value>$%7BCOMMON_LIBRARIES%7D/Libraries/math/CLAmath/c28</value>
+			<value>$%7BCOMMON_LIBRARIES%7D/libraries/math/CLAmath/c28</value>
 		</variable>
 		<variable>
 			<name>COMMON_LIBRARIES</name>
-			<value>file:/C:/GITHUB/mt3gt-standard-meter/common_librairies</value>
+			<value>$%7BPARENT-2-PROJECT_LOC%7D/common_libraries</value>
 		</variable>
 	</variableList>
 </projectDescription>

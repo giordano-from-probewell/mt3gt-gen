@@ -31,9 +31,9 @@
 			<locationURI>APPLICATION_LOC</locationURI>
 		</link>
 		<link>
-			<name>source/common_librairies</name>
+			<name>source/common_libraries</name>
 			<type>2</type>
-			<locationURI>PARENT-2-PROJECT_LOC/common_librairies</locationURI>
+			<locationURI>PARENT-2-COMMON_LIBRARIES/MT3GT-PW/mt3gt-standard-meter/common_libraries</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>
