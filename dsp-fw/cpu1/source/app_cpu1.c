@@ -187,7 +187,7 @@ void app_init_cpu1(application_t *app)
 
     app->id.data.full.my_address = address;
 
-    memcpy(app->id.data.full.probewell_part_number, "9015-6040       ", 16);
+    memcpy(app->id.data.full.probewell_part_number, "9015-6040:STD   ", 16);
     memcpy(app->id.data.full.serial_number,         "22531515        ", 16);
     memcpy(app->id.data.full.fabrication_date,      "20240605", 8);
     memcpy(app->id.data.full.last_verfication_date, "20240605", 8);
@@ -581,6 +581,15 @@ void app_run_cpu1(application_t *app)
                 }
                 Cla1ForceTask4();
             }
+
+
+            if(flag_reset_metrics){
+
+                Cla1ForceTask5();  //reset metrics in cla
+                flag_reset_metrics = false;
+            }
+
+
 
             flag_zc = false;
         }
@@ -1513,6 +1522,19 @@ void _measures_fill_data(void)
     app.meter.phase[0].measures.freq = cla_phase_aux.frequency;
     app.meter.phase[0].measures.period = cla_phase_aux.period;
 
+    app.meter.phase[0].metrics.v.avg = cla_phase_aux.metrics.v.avg;
+    app.meter.phase[0].metrics.v.max = cla_phase_aux.metrics.v.max;
+    app.meter.phase[0].metrics.v.min = cla_phase_aux.metrics.v.min;
+    app.meter.phase[0].metrics.i.avg = cla_phase_aux.metrics.i.avg;
+    app.meter.phase[0].metrics.i.max = cla_phase_aux.metrics.i.max;
+    app.meter.phase[0].metrics.i.min = cla_phase_aux.metrics.i.min;
+    app.meter.phase[0].metrics.phi.avg = cla_phase_aux.metrics.phi.avg;
+    app.meter.phase[0].metrics.phi.max = cla_phase_aux.metrics.phi.max;
+    app.meter.phase[0].metrics.phi.min = cla_phase_aux.metrics.phi.min;
+    app.meter.phase[0].metrics.period.avg = cla_phase_aux.metrics.period.avg;
+    app.meter.phase[0].metrics.period.max = cla_phase_aux.metrics.period.max;
+    app.meter.phase[0].metrics.period.min = cla_phase_aux.metrics.period.min;
+
     app.meter.phase[1].measures.v = cla_phase_a.v_rms;
     app.meter.phase[1].measures.i = cla_phase_a.i_rms;
     app.meter.phase[1].measures.phi = cla_phase_a.phi;
@@ -1525,6 +1547,19 @@ void _measures_fill_data(void)
     app.meter.phase[1].measures.var = cla_phase_a.var_cycle;
     app.meter.phase[1].measures.freq = cla_phase_a.frequency;
     app.meter.phase[1].measures.period = cla_phase_a.period;
+
+    app.meter.phase[1].metrics.v.avg = cla_phase_a.metrics.v.avg;
+    app.meter.phase[1].metrics.v.max = cla_phase_a.metrics.v.max;
+    app.meter.phase[1].metrics.v.min = cla_phase_a.metrics.v.min;
+    app.meter.phase[1].metrics.i.avg = cla_phase_a.metrics.i.avg;
+    app.meter.phase[1].metrics.i.max = cla_phase_a.metrics.i.max;
+    app.meter.phase[1].metrics.i.min = cla_phase_a.metrics.i.min;
+    app.meter.phase[1].metrics.phi.avg = cla_phase_a.metrics.phi.avg;
+    app.meter.phase[1].metrics.phi.max = cla_phase_a.metrics.phi.max;
+    app.meter.phase[1].metrics.phi.min = cla_phase_a.metrics.phi.min;
+    app.meter.phase[1].metrics.period.avg = cla_phase_a.metrics.period.avg;
+    app.meter.phase[1].metrics.period.max = cla_phase_a.metrics.period.max;
+    app.meter.phase[1].metrics.period.min = cla_phase_a.metrics.period.min;
 
     app.meter.phase[2].measures.v = cla_phase_b.v_rms;
     app.meter.phase[2].measures.i = cla_phase_b.i_rms;
@@ -1539,6 +1574,18 @@ void _measures_fill_data(void)
     app.meter.phase[2].measures.freq = cla_phase_b.frequency;
     app.meter.phase[2].measures.period = cla_phase_b.period;
 
+    app.meter.phase[2].metrics.v.avg = cla_phase_b.metrics.v.avg;
+    app.meter.phase[2].metrics.v.max = cla_phase_b.metrics.v.max;
+    app.meter.phase[2].metrics.v.min = cla_phase_b.metrics.v.min;
+    app.meter.phase[2].metrics.i.avg = cla_phase_b.metrics.i.avg;
+    app.meter.phase[2].metrics.i.max = cla_phase_b.metrics.i.max;
+    app.meter.phase[2].metrics.i.min = cla_phase_b.metrics.i.min;
+    app.meter.phase[2].metrics.phi.avg = cla_phase_b.metrics.phi.avg;
+    app.meter.phase[2].metrics.phi.max = cla_phase_b.metrics.phi.max;
+    app.meter.phase[2].metrics.phi.min = cla_phase_b.metrics.phi.min;
+    app.meter.phase[2].metrics.period.avg = cla_phase_b.metrics.period.avg;
+    app.meter.phase[2].metrics.period.max = cla_phase_b.metrics.period.max;
+    app.meter.phase[2].metrics.period.min = cla_phase_b.metrics.period.min;
 
     app.meter.phase[3].measures.v = cla_phase_c.v_rms;
     app.meter.phase[3].measures.i = cla_phase_c.i_rms;
@@ -1552,6 +1599,19 @@ void _measures_fill_data(void)
     app.meter.phase[3].measures.var = cla_phase_c.var_cycle;
     app.meter.phase[3].measures.freq = cla_phase_c.frequency;
     app.meter.phase[3].measures.period = cla_phase_c.period;
+
+    app.meter.phase[3].metrics.v.avg = cla_phase_c.metrics.v.avg;
+    app.meter.phase[3].metrics.v.max = cla_phase_c.metrics.v.max;
+    app.meter.phase[3].metrics.v.min = cla_phase_c.metrics.v.min;
+    app.meter.phase[3].metrics.i.avg = cla_phase_c.metrics.i.avg;
+    app.meter.phase[3].metrics.i.max = cla_phase_c.metrics.i.max;
+    app.meter.phase[3].metrics.i.min = cla_phase_c.metrics.i.min;
+    app.meter.phase[3].metrics.phi.avg = cla_phase_c.metrics.phi.avg;
+    app.meter.phase[3].metrics.phi.max = cla_phase_c.metrics.phi.max;
+    app.meter.phase[3].metrics.phi.min = cla_phase_c.metrics.phi.min;
+    app.meter.phase[3].metrics.period.avg = cla_phase_c.metrics.period.avg;
+    app.meter.phase[3].metrics.period.max = cla_phase_c.metrics.period.max;
+    app.meter.phase[3].metrics.period.min = cla_phase_c.metrics.period.min;
 
 }
 
@@ -1635,18 +1695,18 @@ static inline float32_t snapshot_energy_dnwh_stable(void)
     volatile float32_t dnwhb1, dnwhb2;
     volatile float32_t dnwhc1, dnwhc2;
 
-        do {
-            dnwha1 =  cla_test_aux.energy_dnwh_a[meter_test.sample_index_new];
-            dnwha2 =  cla_test_aux.energy_dnwh_a[meter_test.sample_index_new];
-        } while (dnwha1 != dnwha2);
-        do {
-            dnwhb1 =  cla_test_aux.energy_dnwh_b[meter_test.sample_index_new];
-            dnwhb2 =  cla_test_aux.energy_dnwh_b[meter_test.sample_index_new];
-        } while (dnwhb1 != dnwhb2);
-        do {
-            dnwhc1 =  cla_test_aux.energy_dnwh_c[meter_test.sample_index_new];
-            dnwhc2 =  cla_test_aux.energy_dnwh_c[meter_test.sample_index_new];
-        } while (dnwhc1 != dnwhc2);
+    do {
+        dnwha1 =  cla_test_aux.energy_dnwh_a[meter_test.sample_index_new];
+        dnwha2 =  cla_test_aux.energy_dnwh_a[meter_test.sample_index_new];
+    } while (dnwha1 != dnwha2);
+    do {
+        dnwhb1 =  cla_test_aux.energy_dnwh_b[meter_test.sample_index_new];
+        dnwhb2 =  cla_test_aux.energy_dnwh_b[meter_test.sample_index_new];
+    } while (dnwhb1 != dnwhb2);
+    do {
+        dnwhc1 =  cla_test_aux.energy_dnwh_c[meter_test.sample_index_new];
+        dnwhc2 =  cla_test_aux.energy_dnwh_c[meter_test.sample_index_new];
+    } while (dnwhc1 != dnwhc2);
 
     return (float32_t) dnwha1 + dnwhb1 + dnwhc1;
 }
@@ -1711,20 +1771,20 @@ void led_pulse_isr(void)
             meter_test.ref_energy_uWh += meter_test.led_energy_comp_uWh;
 
 
-//            error[k] = meter_test.error_pct;
-//            energy[k] = (float32_t)meter_test.energy_test_init_uwh;
-//            energy1[k] = (float32_t)meter_test.energy_test_end_uwh;
-//            frac1[k] = meter_test.frac_first_uWh;
-//            frac2[k] = meter_test.frac_last_uWh;
-//            energia1[k] = measurede_energy;
-//            energia2[k] = (float)cla_phase_a.energy.uwh_acc;
-//            ticks[k] = (float)meter_test.test_ticks;
-//            index[k] = (float)meter_test.sample_index_old;
-//            index1[k] = (float)meter_test.sample_index_new;
-//            numciclos[k] = (float) num_ciclo;
-//            k++;
-//            if(k>=100)
-//                k=0;
+            //            error[k] = meter_test.error_pct;
+            //            energy[k] = (float32_t)meter_test.energy_test_init_uwh;
+            //            energy1[k] = (float32_t)meter_test.energy_test_end_uwh;
+            //            frac1[k] = meter_test.frac_first_uWh;
+            //            frac2[k] = meter_test.frac_last_uWh;
+            //            energia1[k] = measurede_energy;
+            //            energia2[k] = (float)cla_phase_a.energy.uwh_acc;
+            //            ticks[k] = (float)meter_test.test_ticks;
+            //            index[k] = (float)meter_test.sample_index_old;
+            //            index1[k] = (float)meter_test.sample_index_new;
+            //            numciclos[k] = (float) num_ciclo;
+            //            k++;
+            //            if(k>=100)
+            //                k=0;
 
 
 
@@ -1750,9 +1810,9 @@ void led_zc_isr(void)
     int64_t base_uwh = 0;
     int64_t cycle_uwh = 0;
 
-//    mark[k] = 0;
+    //    mark[k] = 0;
     measurede_energy = 0;
-//    num_ciclo++;
+    //    num_ciclo++;
 
     if (meter_test.state != LEDTEST_RUNNING)
     {
@@ -1763,8 +1823,8 @@ void led_zc_isr(void)
 
     if (meter_test.flag_first_zc)
     {
-//        num_ciclo= 0;
-//        mark[k] = 111;
+        //        num_ciclo= 0;
+        //        mark[k] = 111;
         meter_test.sample_index_old = (meter_test.test_ticks * 512) / meter_test.cycle_ticks;
         if (meter_test.sample_index_old >= 512) meter_test.sample_index_old = 511;
         if (meter_test.sample_index_old < 0) meter_test.sample_index_old = 0;

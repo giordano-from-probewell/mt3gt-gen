@@ -35,8 +35,39 @@
 // the CLA and the C28x CPU must be defined in the C (or C++) code, and not the
 // CLA code.  
 
-float32_t interpolate_current(float32_t I_prev, float32_t I_curr, float32_t alpha) {
+static inline float32_t interpolate_current(float32_t I_prev, float32_t I_curr, float32_t alpha) {
     return I_curr + alpha * (I_prev - I_curr);
+}
+
+
+static inline void metric_reset(metric_t *m) {
+    m->avg = 0.0f;
+    m->min = FLT_MAX;
+    m->max = FLT_MIN;
+    m->n = 0;
+}
+
+static inline void metrics_reset(metrics_t *m) {
+    metric_reset(&m->v);
+    metric_reset(&m->i);
+    metric_reset(&m->period);
+    metric_reset(&m->phi);
+
+}
+
+static inline void metric_update(metric_t *m, float32_t x) {
+    m->n++;
+    m->avg += (x - m->avg) / (float32_t)m->n;
+    if (x < m->min) m->min = x;
+    if (x > m->max) m->max = x;
+}
+
+static inline void metrics_update(cla_phase_t *cla_phase ) {
+    metric_update(&cla_phase->metrics.v, cla_phase->v_rms);
+    metric_update(&cla_phase->metrics.i, cla_phase->i_rms);
+    metric_update(&cla_phase->metrics.period, cla_phase->period);
+    metric_update(&cla_phase->metrics.phi, cla_phase->phi);
+
 }
 
 
@@ -273,6 +304,8 @@ __interrupt void Cla1Task1 ( void )
     cla_test_aux.energy_cycle_uwh_a = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
     cla_test_aux.energy_acc_uwh_a += cla_test_aux.energy_cycle_uwh_a;
     normalize_signed_energy (&cla_test_aux.energy_acc_uwh_a,   &cla_test_aux.energy_acc_wh_a);
+    metrics_update(&cla_phase_a);
+
 
     GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 
@@ -312,6 +345,7 @@ __interrupt void Cla1Task2 ( void )
     cla_test_aux.energy_cycle_uwh_b = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
     cla_test_aux.energy_acc_uwh_b += cla_test_aux.energy_cycle_uwh_b;
     normalize_signed_energy (&cla_test_aux.energy_acc_uwh_b,   &cla_test_aux.energy_acc_wh_b);
+    metrics_update(&cla_phase_b);
 
     GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 }
@@ -349,6 +383,7 @@ __interrupt void Cla1Task3 ( void )
     cla_test_aux.energy_cycle_uwh_c = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
     cla_test_aux.energy_acc_uwh_c += cla_test_aux.energy_cycle_uwh_c;
     normalize_signed_energy (&cla_test_aux.energy_acc_uwh_c,   &cla_test_aux.energy_acc_wh_c);
+    metrics_update(&cla_phase_c);
 
     GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 }
@@ -393,6 +428,8 @@ __interrupt void Cla1Task4 ( void )
     }
     analyze_phase_calc(&cla_phase_aux);
 
+    metrics_update(&cla_phase_aux);
+
     GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 
 }
@@ -407,6 +444,12 @@ __interrupt void Cla1Task5 ( void )
 #if (CLA_DEBUG==1)
     __mdebugstop();
 #endif
+
+    metrics_reset(&cla_phase_a.metrics);
+    metrics_reset(&cla_phase_b.metrics);
+    metrics_reset(&cla_phase_c.metrics);
+
+
 }
 
 //

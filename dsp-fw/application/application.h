@@ -27,6 +27,7 @@
 #define IPC_CMD_SET_CURRENT_RANGE   0x11
 #define IPC_CMD_START_TEST          0x12
 #define IPC_CMD_RESET_TEST          0x13
+#define IPC_CMD_RESET_METRICS       0x14
 
 
 /************************
@@ -232,6 +233,20 @@ typedef struct calibration_st
     float32_t alpha[3];         // angle correction
 }calibration_t;
 
+typedef struct {
+    float32_t avg;
+    float32_t max;
+    float32_t min;
+} app_metric_t;
+
+typedef struct {
+    app_metric_t v;
+    app_metric_t i;
+    app_metric_t period;
+    app_metric_t phi;
+} app_metrics_t;
+
+
 typedef struct phase_st
 {
     phase_desc_t desc;
@@ -264,6 +279,7 @@ typedef struct phase_st
         float32_t freq;
         float32_t period;
     }measures;
+    app_metrics_t metrics;
 } phase_t;
 
 typedef struct meter_st
@@ -299,7 +315,7 @@ extern int8_t new_cal_index;
 
 extern bool flag_start_test;
 extern bool flag_reset_test;
-
+extern bool flag_reset_metrics;
 
 generic_status_t app_init(application_t * this_app);
 generic_status_t app_run(application_t * this_app);

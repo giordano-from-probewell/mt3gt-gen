@@ -169,6 +169,12 @@ void ipc_rx_service_cpu1(void)
             flag_start_test = true;
 
         }
+
+        if(cmd == IPC_CMD_RESET_METRICS)
+        {
+            flag_reset_metrics = true;
+
+        }
     }
 }
 

@@ -132,7 +132,19 @@ typedef struct cla_meter_test_st {
 } cla_meter_test_t;
 
 
+typedef struct {
+    int32_t n;
+    float32_t avg;
+    float32_t max;
+    float32_t min;
+} metric_t;
 
+typedef struct {
+    metric_t v;
+    metric_t i;
+    metric_t period;
+    metric_t phi;
+} metrics_t;
 
 
 typedef struct {
@@ -200,13 +212,14 @@ typedef struct cla_phase_st
 
     cla_calibrations_t cal;
 
-
     float32_t v_factor_num;
     float32_t v_factor_den;
     float32_t i_factor_num;
     float32_t i_factor_den;
 
     cla_energy_acc_t energy;
+
+    metrics_t metrics;
 
 }cla_phase_t;
 

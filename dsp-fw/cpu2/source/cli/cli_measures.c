@@ -1,6 +1,8 @@
-#include <cli_measures.h>
+#include "cli_measures.h"
 #include "my_time.h"
 #include "generic_definitions.h"
+
+#include "ipc_simple.h"
 #include "application.h"
 
 static void _handle_menu_init(cli_menu_t *menu, const my_time_t time_actual, generic_status_t *ret) {
@@ -193,29 +195,29 @@ static void _handle_data_1(cli_menu_t *menu, const my_time_t time_actual, int16_
                           app.meter.phase[2].measures.vah,
                           app.meter.phase[3].measures.vah,
 
-                          0,//app.meter.phase[1].voltage.metrics.rms_avg,
-                          0,//app.meter.phase[2].voltage.metrics.rms_avg,
-                          0,//app.meter.phase[3].voltage.metrics.rms_avg,
+                          app.meter.phase[1].metrics.v.avg,
+                          app.meter.phase[2].metrics.v.avg,
+                          app.meter.phase[3].metrics.v.avg,
 
-                          0,//app.meter.phase[1].voltage.metrics.rms_max,
-                          0,//app.meter.phase[2].voltage.metrics.rms_max,
-                          0,//app.meter.phase[3].voltage.metrics.rms_max,
+                          app.meter.phase[1].metrics.v.max,
+                          app.meter.phase[2].metrics.v.max,
+                          app.meter.phase[3].metrics.v.max,
 
-                          0,//app.meter.phase[1].voltage.metrics.rms_min,
-                          0,//app.meter.phase[2].voltage.metrics.rms_min,
-                          0,//app.meter.phase[3].voltage.metrics.rms_min,
+                          app.meter.phase[1].metrics.v.min,
+                          app.meter.phase[2].metrics.v.min,
+                          app.meter.phase[3].metrics.v.min,
 
-                          0,//app.meter.phase[1].current.metrics.rms_avg,
-                          0,//app.meter.phase[2].current.metrics.rms_avg,
-                          0,//app.meter.phase[3].current.metrics.rms_avg,
+                          app.meter.phase[1].metrics.i.avg,
+                          app.meter.phase[2].metrics.i.avg,
+                          app.meter.phase[3].metrics.i.avg,
 
-                          0,//app.meter.phase[1].current.metrics.rms_max,
-                          0,//app.meter.phase[2].current.metrics.rms_max,
-                          0,//app.meter.phase[3].current.metrics.rms_max,
+                          app.meter.phase[1].metrics.i.max,
+                          app.meter.phase[2].metrics.i.max,
+                          app.meter.phase[3].metrics.i.max,
 
-                          0,//app.meter.phase[1].current.metrics.rms_min,
-                          0,//app.meter.phase[2].current.metrics.rms_min,
-                          0//app.meter.phase[3].current.metrics.rms_min
+                          app.meter.phase[1].metrics.i.min,
+                          app.meter.phase[2].metrics.i.min,
+                          app.meter.phase[3].metrics.i.min
 
             );
 
@@ -288,6 +290,14 @@ static void _handle_data_1_cmd(cli_menu_t *menu, const my_time_t time_actual, in
     *ret = STATUS_PROCESSING;
     if(rcv == 'x' || rcv == 'X'){
         menu->machine.state = STATE_CLI_MENU_ENDING;
+        *ret = STATUS_PROCESSING;
+    }
+    if(rcv == 'r' || rcv == 'R'){
+
+        int8_t x=0;
+        ipc_send_to_cpu1(IPC_CMD_RESET_METRICS, &x, 1);
+
+        menu->machine.state = STATE_CLI_DATA_1_WAINTNG_CMD;
         *ret = STATUS_PROCESSING;
     }
     else {

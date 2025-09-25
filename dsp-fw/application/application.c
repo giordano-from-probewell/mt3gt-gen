@@ -73,7 +73,7 @@ int8_t new_cal_index = 0;
 
 bool flag_start_test = false;
 bool flag_reset_test = false;
-
+bool flag_reset_metrics = false;
 
 #endif
 
