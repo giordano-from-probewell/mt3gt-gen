@@ -88,11 +88,6 @@ static inline bool abi_ready(const application_t *a) {
 }
 
 static inline void check_abi(application_t *a) {
-
-    const uintptr_t APP_ADDR_EXPECT = 0x0C000; //app struct writable by cpu1
-    const uintptr_t AI_ADDR_EXPECT = 0x0C400; //app
-
-
     const uint32_t MAX_SPINS = 500000;
     uint32_t spins = 0;
     while (!abi_ready(a) && spins++ < MAX_SPINS) {
@@ -104,10 +99,7 @@ static inline void check_abi(application_t *a) {
     }
 }
 
-
 #endif
-
-
 
 
 
@@ -118,23 +110,13 @@ generic_status_t app_init(application_t * this_app)
 
 #ifdef CPU1
     {
-        // Clear any IPC flags if set already
-        IPC_clearFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_ALL);
         init_abi(this_app);
         /*ret = */app_init_cpu1(this_app);
-        // Synchronize both the cores
-        IPC_sync(IPC_CPU1_L_CPU2_R, SYNC_FLAG);
     }
 #elif defined(CPU2)
     {
-        // Clear any IPC flags if set already
-        IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_ALL);
-        EINT;
-        ERTM;
         check_abi(this_app);
-        IPC_sync(IPC_CPU2_L_CPU1_R, SYNC_FLAG);
         /*ret = */app_init_cpu2(this_app);
-
     }
 #endif
     return ret;
@@ -142,17 +124,23 @@ generic_status_t app_init(application_t * this_app)
 
 
 
-
 generic_status_t app_run(application_t * this_app)
 {
     generic_status_t ret = STATUS_DONE;
 
+    // Clear any IPC flags if set already
+    IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_ALL);
 #ifdef CPU1
     {
         app_run_cpu1(this_app);
+        // Synchronize both the cores after initiate app
+        IPC_sync(IPC_CPU1_L_CPU2_R, SYNC_FLAG);
     }
 #elif defined(CPU2)
     {
+        EINT;
+        ERTM;
+        IPC_sync(IPC_CPU2_L_CPU1_R, SYNC_FLAG); //wait cpu1 initiate app
         app_run_cpu2(this_app);
     }
 #endif
