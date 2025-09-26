@@ -35,240 +35,6 @@
 // the CLA and the C28x CPU must be defined in the C (or C++) code, and not the
 // CLA code.  
 
-static inline float32_t interpolate_current(float32_t I_prev, float32_t I_curr, float32_t alpha) {
-    return I_curr + alpha * (I_prev - I_curr);
-}
-
-
-static inline void metric_reset(metric_t *m) {
-    m->avg = 0.0f;
-    m->min = FLT_MAX;
-    m->max = FLT_MIN;
-    m->n = 0;
-}
-
-static inline void metrics_reset(metrics_t *m) {
-    metric_reset(&m->v);
-    metric_reset(&m->i);
-    metric_reset(&m->period);
-    metric_reset(&m->phi);
-
-}
-
-static inline void metric_update(metric_t *m, float32_t x) {
-    m->n++;
-    m->avg += (x - m->avg) / (float32_t)m->n;
-    if (x < m->min) m->min = x;
-    if (x > m->max) m->max = x;
-}
-
-static inline void metrics_update(cla_phase_t *cla_phase ) {
-    metric_update(&cla_phase->metrics.v, cla_phase->v_rms);
-    metric_update(&cla_phase->metrics.i, cla_phase->i_rms);
-    metric_update(&cla_phase->metrics.period, cla_phase->period);
-    metric_update(&cla_phase->metrics.phi, cla_phase->phi);
-
-}
-
-
-void  analyze_phase_init(cla_phase_t *cla_phase)
-{
-    cla_phase->i2_prev              = 0.0f;
-    cla_phase->i_dc_acc             = 0.0f;
-    cla_phase->i_dc                 = 0.0f;
-    cla_phase->v_dc                 = 0.0f;
-    cla_phase->v_dc_acc             = 0.0f;
-    cla_phase->w_cycle              = 0.0f;
-    cla_phase->va_cycle             = 0.0f;
-    cla_phase->var_cycle            = 0.0f;
-    cla_phase->cal.voltage_cal_index    = 0;
-    cla_phase->cal.current_cal_index    = 1;  //2.5A to 15A
-    cla_phase->v_factor_num         = 1.0f;
-    cla_phase->v_factor_den         = 1.0f;
-    cla_phase->i_factor_num         = 1.0f;
-    cla_phase->i_factor_den         = 1.0f;
-
-    cla_phase->energy.uvah_acc = 0;
-    cla_phase->energy.uvarh_acc = 0;
-    cla_phase->energy.uwh_acc = 0;
-    cla_phase->energy.vah = 0;
-    cla_phase->energy.varh = 0;
-    cla_phase->energy.wh = 0;
-
-}
-
-
-void  analyze_phase_reset(cla_phase_t *cla_phase)
-{
-    cla_phase->v_rms_acc = 0.0;
-    cla_phase->i_rms_acc = 0.0;
-
-    cla_phase->w_cycle_acc =0.0;
-
-    cla_phase->dv_i_sum = 0.0f;
-    cla_phase->v2_prev  = 0.0f;
-}
-
-void  analyze_phase_run(cla_phase_t *cla_phase, cla_phase_t *ref_phase, bool isRef)
-{
-    cla_phase->v_dc_acc += cla_phase->v;
-    cla_phase->v = (cla_phase->v-cla_phase->v_dc) ;
-    cla_phase->v2 = (float32_t)(cla_phase->v) *
-            cla_phase->cal.voltage_cal[cla_phase->cal.voltage_cal_index] *
-            cla_phase->cal.voltage_gain[cla_phase->cal.voltage_cal_index] *
-            cla_phase->v_factor_num ;
-    cla_phase->v2 = CLAdiv(cla_phase->v2,cla_phase->v_factor_den);
-
-    cla_phase->i_dc_acc += cla_phase->i;
-    cla_phase->i2 = (float32_t)(cla_phase->i-cla_phase->i_dc);
-    cla_phase->i2 = (float32_t)(cla_phase->i) *
-            cla_phase->cal.current_cal[cla_phase->cal.current_cal_index] *
-            cla_phase->cal.current_gain[cla_phase->cal.current_cal_index] *
-            cla_phase->i_factor_num;
-
-    cla_phase->i3 = interpolate_current(cla_phase->i2_prev, cla_phase->i2, cla_phase->cal.alpha[cla_phase->cal.current_cal_index]);
-    cla_phase->i2_prev = cla_phase->i2;
-
-    cla_phase->v_norm = fabsf(cla_phase->v2);
-    cla_phase->v_rms_acc = cla_phase->v_rms_acc+(cla_phase->v_norm*cla_phase->v_norm);
-
-    cla_phase->i_norm = fabsf(cla_phase->i3);
-    cla_phase->i_rms_acc = cla_phase->i_rms_acc+(cla_phase->i_norm*cla_phase->i_norm);
-
-    cla_phase->w_inst = cla_phase->v2 * cla_phase->i3;
-    cla_phase->w_cycle_acc += cla_phase->w_inst;
-
-    // VAR signal by derivation of V
-    float32_t dv = cla_phase->v2 - cla_phase->v2_prev; // dt is constant, do not change the signal
-    cla_phase->dv_i_sum += dv * cla_phase->i3;
-    cla_phase->v2_prev = cla_phase->v2;
-}
-
-void  analyze_phase_calc(cla_phase_t *cla_phase)
-{
-    cla_phase->i_rms =  CLAsqrt(CLAdiv(cla_phase->i_rms_acc, 512.0));
-    cla_phase->v_rms =  CLAsqrt(CLAdiv(cla_phase->v_rms_acc, 512.0));
-
-    cla_phase->w_cycle = CLAdiv(cla_phase->w_cycle_acc, 512.0);
-    cla_phase->va_cycle = cla_phase->i_rms * cla_phase->v_rms;
-
-    // Power Factor and angle
-    float32_t pf = 0.0f;
-    if (cla_phase->va_cycle > EPSILON) {
-        pf = CLAdiv(cla_phase->w_cycle , cla_phase->va_cycle);
-        // clamp to avoid NaN error
-        if (pf >  1.0f) pf =  1.0f;
-        if (pf < -1.0f) pf = -1.0f;
-    }
-    cla_phase->power_factor = pf;
-
-    float32_t phi_abs = 0.0f;
-    if (pf <= 1.0f && pf >= -1.0f) {
-        phi_abs = CLAacos(pf); // rad
-    }
-
-    // angle signal
-    float32_t q_sign = (cla_phase->dv_i_sum >= 0.0f) ? 1.0f : -1.0f;
-    cla_phase->phi       = phi_abs * q_sign;
-
-    // VAR by power triangle
-    float32_t s2_minus_p2 = cla_phase->va_cycle*cla_phase->va_cycle - cla_phase->w_cycle*cla_phase->w_cycle;
-    if (s2_minus_p2 < 0.0f) s2_minus_p2 = 0.0f; // protection
-    cla_phase->var_cycle = q_sign * CLAsqrt(s2_minus_p2);
-
-    cla_phase->v_dc = CLAdiv(cla_phase->v_dc_acc, 512.0);
-    cla_phase->v_dc_acc = 0;
-    cla_phase->i_dc = CLAdiv(cla_phase->i_dc_acc, 512.0);
-    cla_phase->i_dc_acc = 0;
-}
-
-
-
-static inline int32_t sat_i32_from_float(float x)
-{
-    // saturação defensiva para extremos (evita UB ao converter)
-    if (x >  (float)MAX_ENERGY_PER_CYCLE) return MAX_ENERGY_PER_CYCLE;
-    if (x <  (float)MIN_ENERGY_PER_CYCLE) return MIN_ENERGY_PER_CYCLE;
-    return (int32_t)x;
-}
-
-static inline int16_t sat_i16_from_float(float x)
-{
-    // saturação defensiva para extremos (evita UB ao converter)
-    if (x >  (float)MAX_ENERGY_PER_SAMPLE) return MAX_ENERGY_PER_SAMPLE;
-    if (x <  (float)MIN_ENERGY_PER_SAMPLE) return MIN_ENERGY_PER_SAMPLE;
-    return (int16_t)x;
-}
-
-
-int32_t cycle_power_to_energy(float power_W, float period_s)
-{
-    // energia do ciclo em µWh (float), podendo ser negativa
-    float delta_uWh = (power_W * UWH_PER_WATTSECOND) * period_s;
-
-    // arredonda para inteiro mais próximo, half-away-from-zero
-    float rounded = (delta_uWh >= 0.0f) ? (delta_uWh + 0.5f) : (delta_uWh - 0.5f);
-
-    return sat_i32_from_float(rounded);
-}
-
-
-
-
-// Helpers de normalização (fazem carry em 1 passo, com sinal)
-static inline void normalize_signed_energy(int32_t *acc_uwh, int32_t *whole_wh)
-{
-    // q é o número (positivo ou negativo) de Wh inteiros contidos no acumulador
-    int32_t q = CLAdiv((*acc_uwh) , UWH_PER_WH);     // divisão inteira em C trunca p/ zero -> ok p/ ambos sinais
-    if (q != 0) {
-        *acc_uwh  -= q * UWH_PER_WH;         // sobra em µWh preserva o sinal
-        *whole_wh += (int32_t)q;             // soma/subtrai Wh inteiros
-    }
-}
-
-static inline void normalize_unsigned_energy(uint32_t *acc_uwh, uint32_t *whole_wh)
-{
-    if (*acc_uwh >= (uint32_t)UWH_PER_WH) {
-        uint32_t q = CLAdiv((*acc_uwh) , (uint32_t)UWH_PER_WH);
-        *acc_uwh  -= q * (uint32_t)UWH_PER_WH;
-        *whole_wh += (uint32_t)q;
-    }
-}
-
-
-void accumulate_energy(cla_phase_t *cla_phase)
-{
-    // 1) Energia incremental por ciclo (em µWh/µVArh/µVAh), AGORA como signed
-    //    Assumindo que cycle_power_to_energy já retorna em µ(Wh) com sinal coerente.
-
-    float32_t period = cla_phase->period;
-
-    int32_t duwh   = cycle_power_to_energy(cla_phase->w_cycle,   period);
-    int32_t duvarh = cycle_power_to_energy(cla_phase->var_cycle, period);
-
-    // VAh normalmente é magnitude => force não-negativo (ajuste se sua definição for outra)
-    int32_t duvah_raw = cycle_power_to_energy(cla_phase->va_cycle, period);
-    uint32_t duvah = (duvah_raw >= 0) ? (uint32_t)duvah_raw : (uint32_t)(-duvah_raw);
-
-    // 2) Soma nos acumuladores de µ-unidades
-    //    >>> RECOMENDADO: os campos *_acc abaixo sejam int64_t p/ Wh/VArh e uint64_t p/ VAh
-    cla_phase->energy.uwh_acc   += (int32_t)duwh;
-    cla_phase->energy.uvarh_acc += (int32_t)duvarh;
-    cla_phase->energy.uvah_acc  += (uint32_t)duvah;
-
-    cla_phase->energy.cycle_uwh   = (int32_t)duwh;
-    cla_phase->energy.cycle_uvarh = (int32_t)duvarh;
-    cla_phase->energy.cycle_uvah  = (int32_t)duvah;
-
-
-    // 3) Carry para inteiros (rápido e correto para sinais)
-    normalize_signed_energy (&cla_phase->energy.uwh_acc,   &cla_phase->energy.wh);
-    normalize_signed_energy (&cla_phase->energy.uvarh_acc, &cla_phase->energy.varh);
-    normalize_unsigned_energy(&cla_phase->energy.uvah_acc, &cla_phase->energy.vah);
-
-}
-
-
 
 //
 // Task 1
@@ -280,34 +46,7 @@ __interrupt void Cla1Task1 ( void )
 //    __mdebugstop();
 //#endif
 
-    int16_t i;
 
-    GpioDataRegs.GPASET.bit.GPIO15 = 1; //GPIO_DEBUG_1
-
-    float delta_nWh = 0.0f;
-
-    float mult =  (cla_phase_a.period*NWH_PER_WATTSECOND)/512.0;
-
-    analyze_phase_reset(&cla_phase_a);
-    for(i=0;i<512;i++)
-    {
-        cla_phase_a.v = v_vector[i];
-        cla_phase_a.i = i_vector[i];
-        analyze_phase_run(&cla_phase_a, &cla_phase_a, true);
-        delta_nWh += (cla_phase_a.w_inst * mult);
-        cla_test_aux.energy_dnwh_a[i] = delta_nWh;
-    }
-
-    analyze_phase_calc(&cla_phase_a);
-    accumulate_energy(&cla_phase_a);
-
-    cla_test_aux.energy_cycle_uwh_a = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
-    cla_test_aux.energy_acc_uwh_a += cla_test_aux.energy_cycle_uwh_a;
-    normalize_signed_energy (&cla_test_aux.energy_acc_uwh_a,   &cla_test_aux.energy_acc_wh_a);
-    metrics_update(&cla_phase_a);
-
-
-    GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 
 }
 
@@ -321,33 +60,7 @@ __interrupt void Cla1Task2 ( void )
 //    __mdebugstop();
 //#endif
 
-    int16_t i;
 
-    GpioDataRegs.GPASET.bit.GPIO15 = 1; //GPIO_DEBUG_1
-
-    float delta_nWh = 0.0f;
-
-    float mult =  (cla_phase_b.period*NWH_PER_WATTSECOND)/512.0;
-
-    analyze_phase_reset(&cla_phase_b);
-    for(i=0;i<512;i++)
-    {
-        cla_phase_b.v = v_vector[i];
-        cla_phase_b.i = i_vector[i];
-        analyze_phase_run(&cla_phase_b, &cla_phase_a, true);
-        delta_nWh += (cla_phase_b.w_inst * mult);
-        cla_test_aux.energy_dnwh_b[i] = delta_nWh;
-    }
-
-    analyze_phase_calc(&cla_phase_b);
-    accumulate_energy(&cla_phase_b);
-
-    cla_test_aux.energy_cycle_uwh_b = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
-    cla_test_aux.energy_acc_uwh_b += cla_test_aux.energy_cycle_uwh_b;
-    normalize_signed_energy (&cla_test_aux.energy_acc_uwh_b,   &cla_test_aux.energy_acc_wh_b);
-    metrics_update(&cla_phase_b);
-
-    GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 }
 
 //
@@ -359,33 +72,7 @@ __interrupt void Cla1Task3 ( void )
 //    __mdebugstop();
 //#endif
 
-    int16_t i;
 
-    GpioDataRegs.GPASET.bit.GPIO15 = 1; //GPIO_DEBUG_1
-
-    float delta_nWh = 0.0f;
-
-    float mult =  (cla_phase_c.period*NWH_PER_WATTSECOND)/512.0;
-
-    analyze_phase_reset(&cla_phase_c);
-    for(i=0;i<512;i++)
-    {
-        cla_phase_c.v = v_vector[i];
-        cla_phase_c.i = i_vector[i];
-        analyze_phase_run(&cla_phase_c, &cla_phase_a, true);
-        delta_nWh += (cla_phase_c.w_inst * mult);
-        cla_test_aux.energy_dnwh_c[i] = delta_nWh;
-    }
-
-    analyze_phase_calc(&cla_phase_c);
-    accumulate_energy(&cla_phase_c);
-
-    cla_test_aux.energy_cycle_uwh_c = (uint32_t)( CLAdiv( delta_nWh , 1000.0 ));
-    cla_test_aux.energy_acc_uwh_c += cla_test_aux.energy_cycle_uwh_c;
-    normalize_signed_energy (&cla_test_aux.energy_acc_uwh_c,   &cla_test_aux.energy_acc_wh_c);
-    metrics_update(&cla_phase_c);
-
-    GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 }
 
 
@@ -416,21 +103,6 @@ __interrupt void Cla1Task4 ( void )
     __mdebugstop();
 #endif
 
-    int16_t i;
-
-    GpioDataRegs.GPASET.bit.GPIO15 = 1; //GPIO_DEBUG_1
-    analyze_phase_reset(&cla_phase_aux);
-    for(i=0;i<512;i++)
-    {
-        cla_phase_aux.v = v_vector[i];
-        cla_phase_aux.i = i_vector[i];
-        analyze_phase_run(&cla_phase_aux, &cla_phase_a, true);
-    }
-    analyze_phase_calc(&cla_phase_aux);
-
-    metrics_update(&cla_phase_aux);
-
-    GpioDataRegs.GPACLEAR.bit.GPIO15 = 1; //GPIO_DEBUG_1
 
 }
 
@@ -445,9 +117,7 @@ __interrupt void Cla1Task5 ( void )
     __mdebugstop();
 #endif
 
-    metrics_reset(&cla_phase_a.metrics);
-    metrics_reset(&cla_phase_b.metrics);
-    metrics_reset(&cla_phase_c.metrics);
+
 
 
 }
@@ -482,100 +152,6 @@ __interrupt void Cla1Task8 ( void )
     __mdebugstop();
 #endif
 
-    analyze_phase_init(&cla_phase_aux);
-    analyze_phase_init(&cla_phase_a);
-    analyze_phase_init(&cla_phase_b);
-    analyze_phase_init(&cla_phase_c);
-
-    cla_test_aux.energy_acc_uwh_a = 0;
-    cla_test_aux.energy_cycle_uwh_a = 0;
-    cla_test_aux.energy_acc_wh_a = 0;
-    cla_test_aux.energy_acc_uwh_b = 0;
-    cla_test_aux.energy_cycle_uwh_b = 0;
-    cla_test_aux.energy_acc_wh_b = 0;
-    cla_test_aux.energy_acc_uwh_c = 0;
-    cla_test_aux.energy_cycle_uwh_c = 0;
-    cla_test_aux.energy_acc_wh_c = 0;
-
-
-
-    cla_phase_a.cal.voltage_gain[0]     = 1.0f;
-    cla_phase_a.cal.voltage_gain[1]     = 0.0f;
-    cla_phase_a.cal.voltage_gain[2]     = 0.0f;
-
-    //ADA rises gain, cla decreases gain
-    cla_phase_a.cal.current_gain[0]      = 0.125f;
-    cla_phase_a.cal.current_gain[1]      = 1.0f;
-    cla_phase_a.cal.current_gain[2]      = 8.0f;
-
-    //0 to 2.5A
-    cla_phase_a.cal.current_cal[0]       = 1.0;
-    cla_phase_a.cal.voltage_cal[0]       = 1.0;
-    cla_phase_a.cal.alpha[0] = 0.0;
-
-    //2.5A to 15A
-    cla_phase_a.cal.current_cal[1]       = 1.0;
-    cla_phase_a.cal.voltage_cal[1]       = 1.0;
-    cla_phase_a.cal.alpha[1] = 0.0;
-
-    //>15A
-    cla_phase_a.cal.current_cal[2]       = 1.0;
-    cla_phase_a.cal.voltage_cal[2]       = 1.0;
-    cla_phase_a.cal.alpha[2] = 0.0;
-
-
-
-
-    cla_phase_b.cal.voltage_gain[0]     = 1.0f;
-    cla_phase_b.cal.voltage_gain[1]     = 0.0f;
-    cla_phase_b.cal.voltage_gain[2]     = 0.0f;
-
-    //ADA rises gain, cla decreases gain
-    cla_phase_b.cal.current_gain[0]      = 0.125f;
-    cla_phase_b.cal.current_gain[1]      = 1.0f;
-    cla_phase_b.cal.current_gain[2]      = 8.0f;
-
-    //0 to 2.5A
-    cla_phase_b.cal.current_cal[0]       = 1.0;
-    cla_phase_b.cal.voltage_cal[0]       = 1.0;
-    cla_phase_b.cal.alpha[0] = 0.0;
-
-    //2.5A to 15A
-    cla_phase_b.cal.current_cal[1]       = 1.0;
-    cla_phase_b.cal.voltage_cal[1]       = 1.0;
-    cla_phase_b.cal.alpha[1] = 0.0;
-
-    //>15A
-    cla_phase_b.cal.current_cal[2]       = 1.0;
-    cla_phase_b.cal.voltage_cal[2]       = 1.0;
-    cla_phase_b.cal.alpha[2] = 0.0;
-
-
-
-
-    cla_phase_c.cal.voltage_gain[0]     = 1.0f;
-    cla_phase_c.cal.voltage_gain[1]     = 0.0f;
-    cla_phase_c.cal.voltage_gain[2]     = 0.0f;
-
-    //ADA rises gain, cla decreases gain
-    cla_phase_c.cal.current_gain[0]      = 0.125f;
-    cla_phase_c.cal.current_gain[1]      = 1.0f;
-    cla_phase_c.cal.current_gain[2]      = 8.0f;
-
-    //0 to 2.5A
-    cla_phase_c.cal.current_cal[0]       = 1.0;
-    cla_phase_c.cal.voltage_cal[0]       = 1.0;
-    cla_phase_c.cal.alpha[0] = 0.0;
-
-    //2.5A to 15A
-    cla_phase_c.cal.current_cal[1]       = 1.0;
-    cla_phase_c.cal.voltage_cal[1]       = 1.0;
-    cla_phase_c.cal.alpha[1] = 0.0;
-
-    //>15A
-    cla_phase_c.cal.current_cal[2]       = 1.0;
-    cla_phase_c.cal.voltage_cal[2]       = 1.0;
-    cla_phase_c.cal.alpha[2] = 0.0;
 
 
 

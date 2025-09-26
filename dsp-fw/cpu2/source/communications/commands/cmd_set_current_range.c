@@ -9,7 +9,6 @@
 
 #include "application.h"
 
-#include "amplifier.h"
 #include "ipc_simple.h"
 
 #define _CMD_REQUEST_AMOUNT (1)
@@ -41,36 +40,36 @@ int16_t cmd_current_range(uint8_t *error_category, uint8_t *error_code,uint16_t 
 
 
 
-    if (amplifier_system_ready())
-    {
-
-        if(range == 0)
-        {
-            amplifier_request_gain(AFE_IA, IN_GAIN_8, OUT_GAIN_1);
-            amplifier_request_gain(AFE_IB, IN_GAIN_8, OUT_GAIN_1);
-            amplifier_request_gain(AFE_IC, IN_GAIN_8, OUT_GAIN_1);
-
-        }
-        else if (range == 1)
-        {
-            amplifier_request_gain(AFE_IA, IN_GAIN_1, OUT_GAIN_1);
-            amplifier_request_gain(AFE_IB, IN_GAIN_1, OUT_GAIN_1);
-            amplifier_request_gain(AFE_IC, IN_GAIN_1, OUT_GAIN_1);
-        }
-        else if(range == 2)
-        {
-            amplifier_request_gain(AFE_IA, IN_GAIN_0_125, OUT_GAIN_1);
-            amplifier_request_gain(AFE_IB, IN_GAIN_0_125, OUT_GAIN_1);
-            amplifier_request_gain(AFE_IC, IN_GAIN_0_125, OUT_GAIN_1);
-        }
-
-    }
-    else
-    {
-        *error_category = ERROR(ERROR_EQUIPMENT);
-        *error_code = ERROR(ERROR_EQUIPMENT__AMPLIFIER_IS_BUSY);
-        return (COMMAND_RESULT__ERROR);
-    }
+//    if (amplifier_system_ready())
+//    {
+//
+//        if(range == 0)
+//        {
+//            amplifier_request_gain(AFE_IA, IN_GAIN_8, OUT_GAIN_1);
+//            amplifier_request_gain(AFE_IB, IN_GAIN_8, OUT_GAIN_1);
+//            amplifier_request_gain(AFE_IC, IN_GAIN_8, OUT_GAIN_1);
+//
+//        }
+//        else if (range == 1)
+//        {
+//            amplifier_request_gain(AFE_IA, IN_GAIN_1, OUT_GAIN_1);
+//            amplifier_request_gain(AFE_IB, IN_GAIN_1, OUT_GAIN_1);
+//            amplifier_request_gain(AFE_IC, IN_GAIN_1, OUT_GAIN_1);
+//        }
+//        else if(range == 2)
+//        {
+//            amplifier_request_gain(AFE_IA, IN_GAIN_0_125, OUT_GAIN_1);
+//            amplifier_request_gain(AFE_IB, IN_GAIN_0_125, OUT_GAIN_1);
+//            amplifier_request_gain(AFE_IC, IN_GAIN_0_125, OUT_GAIN_1);
+//        }
+//
+//    }
+//    else
+//    {
+//        *error_category = ERROR(ERROR_EQUIPMENT);
+//        *error_code = ERROR(ERROR_EQUIPMENT__AMPLIFIER_IS_BUSY);
+//        return (COMMAND_RESULT__ERROR);
+//    }
 
 
     ipc_send_to_cpu1(IPC_CMD_SET_CURRENT_RANGE, &range, 1);

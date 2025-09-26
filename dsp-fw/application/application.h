@@ -212,90 +212,16 @@ typedef enum phase_desc_enum
 
 
 
-typedef struct analog_input_st
-{
-    int16_t ads_channel;
-    ada4254_t ada_channel;
-    int32_t value;
-//    struct{
-//        bool flag_new_range;
-//        int16_t current_range;      //0:<2A  1:2A to 25A 2:>25A
-//    }config;
-} analog_input_t;
 
 
-typedef struct calibration_st
-{
-    float32_t voltage_gain[3];
-    float32_t current_gain[3];
-    float32_t voltage_cal[3];
-    float32_t current_cal[3];
-    float32_t alpha[3];         // angle correction
-}calibration_t;
 
-typedef struct {
-    float32_t avg;
-    float32_t max;
-    float32_t min;
-} app_metric_t;
-
-typedef struct {
-    app_metric_t v;
-    app_metric_t i;
-    app_metric_t period;
-    app_metric_t phi;
-} app_metrics_t;
-
-
-typedef struct phase_st
-{
-    phase_desc_t desc;
-    analog_input_t *voltage_input;
-    analog_input_t *current_input;
-    calibration_t *cal_rx;
-    calibration_t *cal_tx;
-    int8_t current_cal_index;
-    bool flag_new_cal_rx;
-
-    struct{
-        float32_t kh;
-        float32_t v_factor_num;
-        float32_t v_factor_den;
-        float32_t i_factor_num;
-        float32_t i_factor_den;
-        bool flag_change_factor;
-    }config;
-    struct{
-        float32_t v;
-        float32_t i;
-        float32_t va;
-        float32_t w;
-        float32_t wh;
-        float32_t var;
-        float32_t varh;
-        float32_t vah;
-        float32_t phi;
-        float32_t power_factor;
-        float32_t freq;
-        float32_t period;
-    }measures;
-    app_metrics_t metrics;
-} phase_t;
-
-typedef struct meter_st
-{
-    analog_input_t *analog_input;
-    phase_t phase[4];
-
-    bool led_status;
-}meter_t;
 
 typedef struct application_st
 {
     my_time_t scheduling;
     identification_t id;
     equipment_t equipment;
-    meter_t meter;
+
     app_state_t app_cpu1_state;
     uint32_t         abi_magic;     // signture
     uint32_t         abi_version;   // version

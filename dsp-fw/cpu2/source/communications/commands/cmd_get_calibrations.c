@@ -27,36 +27,6 @@ int16_t cmd_get_calibrations(uint8_t *error_category, uint8_t *error_code,uint16
         return (COMMAND_RESULT__ERROR);
     }
 
-    for (phase=1;phase<=3;phase++){
-        for(i=0;i<3;i++){
-            tmp.value = app.meter.phase[phase].cal_tx->current_cal[i];
-            data[idx++] = tmp.byte.b3;
-            data[idx++] = tmp.byte.b2;
-            data[idx++] = tmp.byte.b1;
-            data[idx++] = tmp.byte.b0;
-        }
-    }
-
-    for (phase=1;phase<=3;phase++){
-        for(i=0;i<3;i++){
-            tmp.value = app.meter.phase[phase].cal_tx->voltage_cal[i];
-            data[idx++] = tmp.byte.b3;
-            data[idx++] = tmp.byte.b2;
-            data[idx++] = tmp.byte.b1;
-            data[idx++] = tmp.byte.b0;
-        }
-    }
-
-    for (phase=1;phase<=3;phase++){
-        for(i=0;i<3;i++){
-            tmp.value = app.meter.phase[phase].cal_tx->alpha[i];
-            data[idx++] = tmp.byte.b3;
-            data[idx++] = tmp.byte.b2;
-            data[idx++] = tmp.byte.b1;
-            data[idx++] = tmp.byte.b0;
-        }
-    }
-
 
 
 

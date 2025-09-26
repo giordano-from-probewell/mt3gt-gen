@@ -59,12 +59,6 @@ int16_t cmd_set_calibration(uint8_t *error_category, uint8_t *error_code,uint16_
     tmp.byte.b1 = data[i+5];
     tmp.byte.b0 = data[i+6];
 
-    if(parameter == 0) //current
-    app.meter.phase[phase1].cal_rx->current_cal[index]  = tmp.value;
-    else if(parameter == 1) //voltage
-    app.meter.phase[phase1].cal_rx->voltage_cal[index]  = tmp.value;
-    else if(parameter == 2) //alpha
-    app.meter.phase[phase1].cal_rx->alpha[index]        = tmp.value;
 
 
 

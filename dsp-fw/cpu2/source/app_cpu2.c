@@ -6,7 +6,6 @@
 #include "communications.h"
 #include "ipc_simple.h"
 
-#include "amplifier.h"
 
 #include <stdio.h>
 
@@ -29,9 +28,6 @@ void app_init_cpu2(application_t *app) {
     buzzer_init(app->id.data.full.my_address);
     cli_update_display_raw("Buzzer: Ok \n\r");
 
-    SPI_init(SPIA_BASE);
-    amplifier_system_start(app);
-    cli_update_display_raw("Amplifiers: Start \n\r");
 
     if (boot_error)
         buzzer_enqueue(boot_fail);
@@ -62,7 +58,7 @@ void app_run_cpu2(application_t *app) {
             int16_t status;
 
             cpu1_running = true;
-            cli_update_display_raw("Time Domain: Ok\n\r");
+            cli_update_display_raw("Gen CPU: Ok\n\r");
 
 
             app_cpu2_state = APP_STATE_RUNNING;
@@ -72,7 +68,6 @@ void app_run_cpu2(application_t *app) {
     case APP_STATE_RUNNING:
 
 
-        amplifier_system_poll(time_actual);
         cli_processing (time_actual);
         comm_processing(time_actual);
         buzzer_state_machine(time_actual);
