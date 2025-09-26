@@ -138,14 +138,10 @@ void main(void)
     //    PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
 
 
-    // Clear any IPC flags if set already
-    IPC_clearFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_ALL);
-
 
     app_init(&app);
 
-    // Synchronize both the cores
-    IPC_sync(IPC_CPU1_L_CPU2_R, SYNC_FLAG);
+
 
 
     while(1)

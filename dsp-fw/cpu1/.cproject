@@ -100,7 +100,7 @@
 									<listOptionValue builtIn="false" value="CLA_C"/>
 									<listOptionValue builtIn="false" value="_FLASH"/>
 									<listOptionValue builtIn="false" value="_DUAL_HEADERS"/>
-									<listOptionValue builtIn="false" value="_OCXO_25MHz"/>
+									<listOptionValue builtIn="false" value="x_OCXO_25MHz"/>
 									<listOptionValue builtIn="false" value="CLA_MATH_TABLES_IN_ROM=0"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.DIAG_SUPPRESS.669291293" name="Suppress diagnostic &lt;id&gt; (--diag_suppress, -pds)" superClass="com.ti.ccstudio.buildDefinitions.C2000_22.6.compilerID.DIAG_SUPPRESS" valueType="stringList">

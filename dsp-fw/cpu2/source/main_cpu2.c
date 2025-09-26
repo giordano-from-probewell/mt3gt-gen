@@ -112,21 +112,6 @@ void main(void)
 
 
 
-    //
-    // Clear any IPC flags if set already
-    //
-    IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_ALL);
-
-    //
-    // Enable Global Interrupt (INTM) and realtime interrupt (DBGM)
-    //
-    EINT;
-    ERTM;
-
-    //
-    // Synchronize both the cores.
-    //
-    IPC_sync(IPC_CPU2_L_CPU1_R, SYNC_FLAG);
 
 
     app_init(&app);

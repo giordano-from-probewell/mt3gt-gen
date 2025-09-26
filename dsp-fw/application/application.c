@@ -65,26 +65,43 @@ bool flag_reset_metrics = false;
 
 #ifdef CPU1
 
-static inline void app_init_links(void) {
+static inline void init_abi(application_t *a) {
+    a->abi.magic   = ABI_MAGIC;
+    a->abi.version = ABI_VERSION;
+    a->abi.size    = (uint32_t)sizeof(application_t);
+    // opcional: barrier se outra CPU puder ler já
+    __asm(" RPT #3 || NOP");
 
-    app.abi_magic   = 0x41505041U;    // 'APPA'
-    app.abi_version = 0x00010000U;    // v1.0
 }
 
 #elif defined(CPU2)
 
+static inline bool abi_ready(const application_t *a) {
 
-void abi_check(void) {
-    int error;
-    // endereços esperados – devem bater com o .cmd
-    const uintptr_t APP_ADDR_EXPECT = 0x0C000;
-    const uintptr_t AI_ADDR_EXPECT  = 0x0C400;
+    const uintptr_t APP_ADDR_EXPECT = 0x0C000; //app struct writable by cpu1
+    const uintptr_t AI_ADDR_EXPECT = 0x0C400; //app struct writable by cpu2
 
-    if ((uintptr_t)&app != APP_ADDR_EXPECT)   error=1;//fault();  // linker divergente
+    return (a->abi.magic   == ABI_MAGIC)   &&
+           (a->abi.version == ABI_VERSION) &&
+           (a->abi.size    == (uint32_t)sizeof(application_t)) &&
+           ((uintptr_t)&app == APP_ADDR_EXPECT);
+}
+
+static inline void check_abi(application_t *a) {
+
+    const uintptr_t APP_ADDR_EXPECT = 0x0C000; //app struct writable by cpu1
+    const uintptr_t AI_ADDR_EXPECT = 0x0C400; //app
 
 
-    if (app.abi_magic != 0x41505041U) error=4;//fault();
-    if (app.abi_version != 0x00010000U) error=5;//fault();
+    const uint32_t MAX_SPINS = 500000;
+    uint32_t spins = 0;
+    while (!abi_ready(a) && spins++ < MAX_SPINS) {
+        __asm(" NOP");
+    }
+    if (!abi_ready(a)) {
+
+        ESTOP0;
+    }
 }
 
 
@@ -101,16 +118,25 @@ generic_status_t app_init(application_t * this_app)
 
 #ifdef CPU1
     {
-        app_init_links();
-        app_init_cpu1(this_app);
+        // Clear any IPC flags if set already
+        IPC_clearFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_ALL);
+        init_abi(this_app);
+        /*ret = */app_init_cpu1(this_app);
+        // Synchronize both the cores
+        IPC_sync(IPC_CPU1_L_CPU2_R, SYNC_FLAG);
     }
 #elif defined(CPU2)
     {
-        abi_check() ;
-        app_init_cpu2(this_app);
+        // Clear any IPC flags if set already
+        IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_ALL);
+        EINT;
+        ERTM;
+        check_abi(this_app);
+        IPC_sync(IPC_CPU2_L_CPU1_R, SYNC_FLAG);
+        /*ret = */app_init_cpu2(this_app);
+
     }
 #endif
-
     return ret;
 }
 

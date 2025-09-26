@@ -212,12 +212,24 @@ typedef enum phase_desc_enum
 
 
 
+#define ABI_MAGIC      0xDEADBEEF    // Fixed value for all
+#define ABI_VERSION    1             // ABI Version
+#define ABI_SIZE       sizeof(abi_t) // For validation purpose
 
+typedef struct {
+    uint32_t magic;      // ID unic
+    uint32_t version;    // ABI Version
+    uint32_t size;       // Total size
+    uint32_t status;     //
+    uint8_t  reserved[8];// Espaço reservado para expansão
+} abi_t;
 
 
 
 typedef struct application_st
 {
+    abi_t abi;
+
     my_time_t scheduling;
     identification_t id;
     equipment_t equipment;
