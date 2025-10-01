@@ -1,4 +1,5 @@
 #include "ipc_simple.h"
+#include "my_time.h"
 #include "F2837xD_Ipc_drivers.h"
 #include <string.h>
 #include "buzzer.h"
@@ -60,6 +61,9 @@ bool ipc_send_to_cpu2(uint8_t cmd, const void* payload, uint8_t len)
 
     // Ring doorbell to CPU2
     IPC_setFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_C1_TO_C2);
+
+    tlm_inc(&cpu1_wr.cnt.ipc_c1_to_c2_tx);
+    tlm_push_event((app_telemetry_block_t*)&cpu1_wr, my_time(NULL), EVT_IPC_TX, /*cmd*/ 1);
 
     // Prepare next seq toggle
     s_cpu1_next_seq += 1;
@@ -138,9 +142,12 @@ bool ipc_try_receive_from_cpu2(uint8_t* out_cmd,
 void ipc_rx_service_cpu1(void)
 {
     uint8_t cmd, len, pl[6];
+
     if (ipc_try_receive_from_cpu2(&cmd, pl, &len)) {
         ipc_on_cmd_from_cpu2(cmd, pl, len);
 
+        tlm_inc(&cpu1_wr.cnt.ipc_c2_to_c1_rx);
+        tlm_push_event((app_telemetry_block_t*)&cpu1_wr, my_time(NULL), EVT_IPC_RX, /*cmd*/ 2);
 
         if(cmd == IPC_CMD_SET_CURRENT_RANGE)
         {
@@ -229,6 +236,9 @@ bool ipc_send_to_cpu1(uint8_t cmd, const void* payload, uint8_t len)
     // Toca a campainha para a CPU1
     IPC_setFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_C2_TO_C1);
 
+    tlm_inc(&cpu1_wr.cnt.ipc_c2_to_c1_rx);
+    tlm_push_event((app_telemetry_block_t*)&cpu2_wr, my_time(NULL), EVT_IPC_RX, /*cmd*/ 2);
+
     s_cpu2_next_seq += 1;
     return true;
 }
@@ -272,6 +282,9 @@ __interrupt void ipc_cpu2_isr(void)
                         default: song = event_beep; break;
                         }
                         buzzer_enqueue(song);
+
+                        tlm_inc(&cpu1_wr.cnt.ipc_c2_to_c1_rx);
+                        tlm_push_event((app_telemetry_block_t*)&cpu2_wr, my_time(NULL), EVT_IPC_RX, /*cmd*/ 2);
                     }
                     break;
                 case IPC_CMD_NOP:

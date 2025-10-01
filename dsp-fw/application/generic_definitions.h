@@ -2,28 +2,15 @@
 #define __GENERIC_DEFINITIONS_H_
 
 #include <stdint.h>
-#include <string.h>
 #include <stdbool.h>
+#include <string.h>
 #include <stdio.h>
 #include <errno.h>
 #include <math.h>
 
-#include "F28x_Project.h"
-#include "F2837xD_struct.h"
-#include "F2837xD_device.h"
-#include "driverlib.h"
-#include "device.h"
-
-#include "driverlib.h"
-#include "device.h"
-#include "types.h"
-#include "hw_ints.h"
-#include "hw_types.h"
-
 #include "my_time.h"
 
-
-extern const char *INITIALIZED;
+extern char *INITIALIZED;
 
 
 #define WAITSTEP                  asm(" RPT #255 || NOP")

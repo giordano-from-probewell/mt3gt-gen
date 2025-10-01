@@ -18,6 +18,7 @@
 #include "fw_info.h"
 #include "status.h"
 #include "identification.h"
+#include "telemetry.h"
 
 #include "ada4254.h"
 #include "buzzer.h"
@@ -212,36 +213,41 @@ typedef enum phase_desc_enum
 
 
 
-#define ABI_MAGIC      0xDEADBEEF    // Fixed value for all
-#define ABI_VERSION    1             // ABI Version
-#define ABI_SIZE       sizeof(abi_t) // For validation purpose
+#define ABI_MAGIC      0xDEADCA75       // Fixed value for all
+#define ABI_VERSION    (0x00010000u)    /*  v1.0 */
 
 typedef struct {
     uint32_t magic;      // ID unic
     uint32_t version;    // ABI Version
-    uint32_t size;       // Total size
-    uint32_t status;     //
-    uint8_t  reserved[8];// Espaço reservado para expansão
+    uint32_t size;       // Total app size
+    uint32_t status;     // TODO: use this
+    uint8_t  reserved[8];// Reserved for expansion
 } abi_t;
 
+typedef struct {
+    app_state_t cur;
+    app_state_t prev;
+    uint32_t    enter_count[4];   // IDLE/START/RUNNING/ERROR
+    uint32_t    last_change_ms;
+} app_sm_t;
 
 
 typedef struct application_st
 {
     abi_t abi;
-
-    my_time_t scheduling;
     identification_t id;
     equipment_t equipment;
-
-    app_state_t app_cpu1_state;
-    uint32_t         abi_magic;     // signture
-    uint32_t         abi_version;   // version
+    app_sm_t        sm_cpu1;
+    app_sm_t        *sm_cpu2;
 } application_t;
 
 
 extern const fw_data_t fw_info;
+extern volatile app_telemetry_block_t cpu1_wr;
+extern volatile app_telemetry_block_t cpu2_wr;
 extern application_t app;
+
+#ifdef CPU1
 
 extern bool flag_new_range;
 extern int8_t new_range;
@@ -255,12 +261,30 @@ extern bool flag_start_test;
 extern bool flag_reset_test;
 extern bool flag_reset_metrics;
 
+#endif
+
 generic_status_t app_init(application_t * this_app);
 generic_status_t app_run(application_t * this_app);
 
+typedef void (*state_handler_t)(application_t *app, my_time_t now);
 
+static inline void app_sm_set(app_sm_t *sm, app_state_t s, my_time_t now) {
+    if (sm->cur != s) {
+        sm->prev = sm->cur;
+        sm->cur  = s;
+        sm->enter_count[(int)s]++;
+        sm->last_change_ms = (uint32_t)now;
 
+#ifdef CPU1
+        tlm_inc(&cpu1_wr.cnt.state_transitions);
+        tlm_push_event((app_telemetry_block_t*)&cpu1_wr, now, EVT_STATE, s);
+#elif defined(CPU2)
+        tlm_inc(&cpu2_wr.cnt.state_transitions);
+        tlm_push_event((app_telemetry_block_t*)&cpu2_wr, now, EVT_STATE, s);
+#endif
 
+    }
+}
 
 
 

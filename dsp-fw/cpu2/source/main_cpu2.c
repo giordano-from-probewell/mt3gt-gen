@@ -110,22 +110,11 @@ void main(void)
     //        //
     //        PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
 
-
-
-
-
     app_init(&app);
-
-
 
     while(1)
     {
-
-
         app_run(&app);
-
-
-
     }
 }
 

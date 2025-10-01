@@ -78,7 +78,7 @@ PAGE 1 : /* Data Memory */
    //RAMGS4        : origin = 0x010000, length = 0x001000
    RAMGS_DATA_CPU2	: origin = 0x011000, length = 0x001000
    //RAMGS5        : origin = 0x011000, length = 0x001000
-   RAMGS_CPU1      : origin = 0x012000, length = 0x005FF8
+   RAMGS_CPU2      : origin = 0x012000, length = 0x005FF8
    //RAMGS6        : origin = 0x012000, length = 0x001000
    //RAMGS7        : origin = 0x013000, length = 0x001000
    //RAMGS8        : origin = 0x014000, length = 0x001000
@@ -86,11 +86,11 @@ PAGE 1 : /* Data Memory */
    //RAMGS10       : origin = 0x016000, length = 0x001000
    //RAMGS11       : origin = 0x017000, length = 0x000FF8  /* Uncomment for F28374D, F28376D devices */
    RAMGS11_RSVD    : origin = 0x017FF8, length = 0x000008  /* Reserve and do not use for code as per the errata advisory "Memory: Prefetching Beyond Valid Memory" */
-   RAMGS_CPU2      : origin = 0x018000, length = 0x002000
+   RAMGS_CPU1      : origin = 0x018000, length = 0x003FF8
    //RAMGS12       : origin = 0x018000, length = 0x001000  /* Only Available on F28379D, F28377D, F28375D devices. Remove line on other devices. */
    //RAMGS13       : origin = 0x019000, length = 0x001000  /* Only Available on F28379D, F28377D, F28375D devices. Remove line on other devices. */
-   RAMGS14       : origin = 0x01A000, length = 0x001000  /* Only Available on F28379D/_, F28377D/F28377S, F28375D/F28375S devices. Remove line on other devices. */
-   RAMGS15       : origin = 0x01B000, length = 0x000FF8  /* Only Available on F28379D/_, F28377D/F28377S, F28375D/F28375S devices. Remove line on other devices. */
+   //RAMGS14       : origin = 0x01A000, length = 0x001000  /* Only Available on F28379D/_, F28377D/F28377S, F28375D/F28375S devices. Remove line on other devices. */
+   //RAMGS15       : origin = 0x01B000, length = 0x000FF8  /* Only Available on F28379D/_, F28377D/F28377S, F28375D/F28375S devices. Remove line on other devices. */
    RAMGS15_RSVD    : origin = 0x01BFF8, length = 0x000008  /* Reserve and do not use for code as per the errata advisory "Memory: Prefetching Beyond Valid Memory" */
 
    CLA1_MSGRAMLOW  : origin = 0x001480, length = 0x000080

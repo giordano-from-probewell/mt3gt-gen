@@ -111,7 +111,7 @@ void comm_processing(const my_time_t time_actual)
         commControl.state = state_reset;
     }
 
-//    //JUST FOR DEBUGGING
+//    //if you want to discover the serial port...
 //    {
 //        static my_time_t t = 0;
 //

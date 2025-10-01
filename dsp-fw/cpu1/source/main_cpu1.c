@@ -137,12 +137,7 @@ void main(void)
     //    //
     //    PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
 
-
-
     app_init(&app);
-
-
-
 
     while(1)
     {
@@ -157,8 +152,12 @@ void _distribute_memories(void)
     //RAM GS5 -> CPU2
     MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS5,MEMCFG_GSRAMCONTROLLER_CPU2);
     //RAM GS12,13 -> CPU2
-    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS12,MEMCFG_GSRAMCONTROLLER_CPU2);
-    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS13,MEMCFG_GSRAMCONTROLLER_CPU2);
+    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS6,MEMCFG_GSRAMCONTROLLER_CPU2);
+    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS7,MEMCFG_GSRAMCONTROLLER_CPU2);
+    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS8,MEMCFG_GSRAMCONTROLLER_CPU2);
+    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS9,MEMCFG_GSRAMCONTROLLER_CPU2);
+    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS10,MEMCFG_GSRAMCONTROLLER_CPU2);
+    MemCfg_setGSRAMControllerSel(MEMCFG_SECT_GS11,MEMCFG_GSRAMCONTROLLER_CPU2);
 }
 
 

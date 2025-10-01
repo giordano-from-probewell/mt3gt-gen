@@ -1,5 +1,5 @@
 #include "my_time.h"
-#include "cli_main_menu.h"
+#include "CLI/cli_main_menu.h"
 
 
 static void _handle_menu_init(cli_menu_t *menu, const my_time_t time_actual, generic_status_t *ret)
@@ -11,15 +11,15 @@ static void _handle_menu_init(cli_menu_t *menu, const my_time_t time_actual, gen
     menu->initialized = INITIALIZED;
 }
 
-static void _handle_menu_1(cli_menu_t *menu, const my_time_t time_actual, int16_t rcv, generic_status_t *ret)
+static void _handle_menu(cli_menu_t *menu, const my_time_t time_actual, int16_t rcv, generic_status_t *ret)
 {
     int n = update_display_for_menu(menu->tx->buffer);
     n += snprintf(&(menu->tx->buffer[n]), sizeof(menu->tx->buffer)  - n ,
                   "\r\n"
                   "  ___________________________  \r\n"
                   " |Main Menu [?]              | \r\n"
-                  " |Measures :       [m|c]     | \r\n"
-                  " |                           | \r\n"
+                  " |Test Menu:       [t]       | \r\n"
+                  " |Control Menu:    [c]       | \r\n"
                   " |LOG Menu:        [l]       | \r\n"
                   " |___________________________| \r\n"
                   "                               \r\n");
@@ -59,7 +59,7 @@ generic_status_t cli_main_menu_handler (const my_time_t time_actual, void * cli_
         break;
 
     case STATE_CLI_MENU:
-        _handle_menu_1(menu, time_actual, rcv, &ret);
+        _handle_menu(menu, time_actual, rcv, &ret);
         break;
 
     case STATE_CLI_MENU_END:

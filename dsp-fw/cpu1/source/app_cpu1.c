@@ -1,15 +1,15 @@
 #include "app_cpu1.h"
+#include "F28x_Project.h"
+
 #include "my_time.h"
 #include "cla1_standard_shared.h"
 
 #include "SFO_V8.h"
 
-
+#include "telemetry.h"
 
 #include "ipc_simple.h"
 #include "frequency.h"
-
-
 
 
 #define TO_CPU1 0
@@ -31,25 +31,14 @@
 #define WAITSTEP asm(" RPT #255 || NOP")
 
 
-
-
-
-
-
 void _app_gpio_init(void);
-
-
 
 
 void _cla1_init(void);
 void _cla1_interruption_config(void);
 
-
 __interrupt void access_violation(void);
 __interrupt void xint1_isr(void);
-
-
-
 
 
 __interrupt void Cla1Task1();
@@ -69,26 +58,61 @@ __interrupt void cla1Isr6();
 __interrupt void cla1Isr7();
 __interrupt void cla1Isr8();
 
-
 volatile uint32_t fetchAddress;
-
-
-
 
 
 bool flag_zc = false; //zero crossing mark
 
 
 
+
+
+
+
+static void cpu1_idle   (application_t *app, my_time_t now)
+{
+    app_sm_set(&app->sm_cpu1, APP_STATE_START, now);
+}
+
+static void cpu1_start  (application_t *app, my_time_t now)
+{
+    ipc_simple_init_cpu1();
+    tlm_init_writer((app_telemetry_block_t*)&cpu1_wr);
+    app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
+}
+
+static void cpu1_running(application_t *app, my_time_t now)
+{
+    // loop
+}
+
+static void cpu1_error  (application_t *app, my_time_t now)
+{
+    // if error
+}
+
+static const state_handler_t CPU1_HANDLERS[] =
+{
+ [APP_STATE_IDLE]    = cpu1_idle,
+ [APP_STATE_START]   = cpu1_start,
+ [APP_STATE_RUNNING] = cpu1_running,
+ [APP_STATE_ERROR]   = cpu1_error
+};
+
+
+
+
+
+
+
 void app_init_cpu1(application_t *app)
 {
-    app->app_cpu1_state = APP_STATE_START;
-    uint8_t address = 0;
+
+    uint8_t address;
+    app->sm_cpu1 = (app_sm_t){ .cur = APP_STATE_START };
+
 
     _app_gpio_init();
-
-
-
 
     _cla1_init();
 
@@ -109,24 +133,18 @@ void app_init_cpu1(application_t *app)
 
     Cla1ForceTask8andWait();
     WAITSTEP;
+
+
+
 }
 
-
-
-extern IPC_MessageQueue_t messageQueue;
-extern IPC_Message_t      TxMsg;
 
 
 
 void app_run_cpu1(application_t *app)
 {
-    my_time_t time_actual = 0;
-    time_actual = my_time(NULL);
 
-
-
-
-
+    my_time_t now = my_time(NULL);
 
     // Poll uma mensagem vinda da CPU2 e despache (se existir)
     ipc_rx_service_cpu1();
@@ -134,33 +152,9 @@ void app_run_cpu1(application_t *app)
     //    // (opcional) se a CPU1 também envia para a CPU2, limpe o flag após ACK:
     //    ipc_tx_service(); // sua função CPU1 que faz clear do C1->C2 após ver g_c2_to_c1_ack
 
+    CPU1_HANDLERS[app->sm_cpu1.cur](app, now);
 
-    switch (app->app_cpu1_state) {
 
-    case APP_STATE_IDLE:
-        app->app_cpu1_state = APP_STATE_START;
-        break;
-
-    case APP_STATE_START:
-    {
-
-        ipc_simple_init_cpu1();
-
-        // Enable Global Interrupt (INTM) and real time interrupt (DBGM)
-        EINT;
-        ERTM;
-    }
-
-    app->app_cpu1_state = APP_STATE_RUNNING;
-    break;
-
-    case APP_STATE_RUNNING:
-
-        break;
-
-    case APP_STATE_ERROR:
-        break;
-    }
 }
 
 
