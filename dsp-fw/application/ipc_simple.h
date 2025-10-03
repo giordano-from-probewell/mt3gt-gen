@@ -66,19 +66,6 @@ bool ipc_enqueue_to_cpu1(uint8_t cmd, const void* payload, uint8_t len);
 void ipc_service_cpu1(void);
 void ipc_service_cpu2(void);
 
-//log form cpu1 to cpu2
-static inline bool ipc_log_event_from_cpu1(uint16_t code, uint16_t data, uint16_t t16)
-{
-    uint8_t pl[6];
-    pl[0] = (uint8_t)(code & 0xFF);
-    pl[1] = (uint8_t)(code >> 8);
-    pl[2] = (uint8_t)(data & 0xFF);
-    pl[3] = (uint8_t)(data >> 8);
-    pl[4] = (uint8_t)(t16  & 0xFF);
-    pl[5] = (uint8_t)(t16  >> 8);
-    return ipc_enqueue_to_cpu2(IPC_CMD_LOG_EVT, pl, 6);
-}
-
 
 //CPU1: try to read msg from cpu2, non blocking
 bool ipc_try_receive_from_cpu2(uint8_t* out_cmd,
@@ -98,8 +85,24 @@ __interrupt void ipc_cpu2_isr(void);
 // Convenience: CPU1 tells CPU2 to play a buzzer pattern id
 static inline bool ipc_buzzer_play(uint8_t pattern_id)
 {
-    uint8_t p = pattern_id;
-    return ipc_enqueue_to_cpu2(IPC_CMD_BUZZER_PLAY, &p, 1);
+    return ipc_enqueue_to_cpu2(IPC_CMD_BUZZER_PLAY, &pattern_id, 1);
 }
+
+
+//log form cpu1 to cpu2
+static inline bool ipc_log_event_from_cpu1(uint16_t code, uint16_t data, uint16_t t16)
+{
+    uint8_t pl[6];
+    pl[0] = (uint8_t)(code & 0xFF);
+    pl[1] = (uint8_t)(code >> 8);
+    pl[2] = (uint8_t)(data & 0xFF);
+    pl[3] = (uint8_t)(data >> 8);
+    pl[4] = (uint8_t)(t16  & 0xFF);
+    pl[5] = (uint8_t)(t16  >> 8);
+    return ipc_enqueue_to_cpu2(IPC_CMD_LOG_EVT, pl, 6);
+}
+
+
+
 
 #endif

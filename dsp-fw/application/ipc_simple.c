@@ -1,10 +1,9 @@
 #include "ipc_simple.h"
 #include "my_time.h"
-#include "F2837xD_Ipc_drivers.h"
 #include <string.h>
 #include "buzzer.h"
-#include "ipc.h"
 #include "application.h"
+#include <ipc.h>
 
 // ---- Mailboxes in MSGRAM () ----
 // both CPUs compile; linker maps RAMs.
@@ -26,6 +25,28 @@ static volatile uint8_t s_cpu2_next_seq = 1u; // CPU2 -> CPU1
 // simple barrier (seq before publish)
 static inline void mem_barrier(void) { __asm(" RPT #7 || NOP"); }
 
+/* ---------------- common ring helpers ---------------- */
+static inline void ring_reset(ipc_ring_t* r) { r->head = r->tail = 0u; }
+
+static bool ring_push(ipc_ring_t* r, const ipc_pkt_t* p)
+{
+    uint32_t h = r->head, t = r->tail;
+    if ((h - t) >= IPC_RING_P2) return false;  /* full */
+    r->buf[h & IPC_RING_MASK] = *p;
+    mem_barrier();
+    r->head = h + 1u;
+    return true;
+}
+
+static bool ring_pop(ipc_ring_t* r, ipc_pkt_t* out)
+{
+    uint32_t t = r->tail, h = r->head;
+    if (t == h) return false;
+    *out = r->buf[t & IPC_RING_MASK];
+    r->tail = t + 1u;
+    return true;
+}
+
 
 // =========================== CPU1 ===========================
 #if defined(CPU1)
@@ -39,29 +60,6 @@ static inline void mem_barrier(void) { __asm(" RPT #7 || NOP"); }
 //    (void)cmd; (void)payload; (void)len;
 //}
 
-// Reset ring
-static inline void ring_reset(ipc_ring_t* r){ r->head = r->tail = 0u; }
-
-// Send to ring (return false if full)
-static bool ring_push(ipc_ring_t* r, const ipc_pkt_t* p)
-{
-    uint32_t h = r->head, t = r->tail;
-    if ((h - t) >= IPC_RING_P2) return false; // cheio
-    r->buf[h & IPC_RING_MASK] = *p;
-    mem_barrier();
-    r->head = h + 1u;
-    return true;
-}
-
-// Get from ring (return false if no data)
-static bool ring_pop(ipc_ring_t* r, ipc_pkt_t* out)
-{
-    uint32_t t = r->tail, h = r->head;
-    if (t == h) return false;
-    *out = r->buf[t & IPC_RING_MASK];
-    r->tail = t + 1u;
-    return true;
-}
 
 void ipc_simple_init_cpu1(void)
 {
@@ -133,16 +131,14 @@ bool ipc_try_receive_from_cpu2(uint8_t* out_cmd,
 {
     uint8_t i;
 
-    // Alguma doorbell da CPU2 ativa?
     if (!IPC_isFlagBusyRtoL(IPC_CPU1_L_CPU2_R, IPC_FLAG_C2_TO_C1)) {
         return false;
     }
 
     uint8_t seq = g_c2_to_c1.seq;
     if (s_cpu1_has_last && seq == s_cpu1_last_seq) {
-        // jÃ¡ consumido; libera flag e sai
         IPC_ackFlagRtoL(IPC_CPU1_L_CPU2_R, IPC_FLAG_C2_TO_C1);
-        return false;
+        return false; /* already consumed */
     }
 
     uint8_t cmd = g_c2_to_c1.cmd;
@@ -155,12 +151,10 @@ bool ipc_try_receive_from_cpu2(uint8_t* out_cmd,
         for (i = 0; i < len; ++i) out_payload[i] = g_c2_to_c1.payload[i];
     }
 
-    // espelha ACK para a CPU2 ler
     s_cpu1_last_seq = seq;
     s_cpu1_has_last = true;
     g_c1_to_c2.ack  = seq;
 
-    // libera a doorbell recebida
     IPC_ackFlagRtoL(IPC_CPU1_L_CPU2_R, IPC_FLAG_C2_TO_C1);
     return true;
 }
@@ -178,32 +172,15 @@ void ipc_rx_service_cpu1(void)
 #elif defined(CPU2)
 
 #include "interrupt.h"
-// Se quiser imprimir no CLI:
+
+/* Provide your own sinks in app (no 'extern' on definitions!) */
 extern void cli_log_info(const char* s);
 extern void cli_log_info1(const char* s);
-// Reset ring
-static inline void ring_reset(ipc_ring_t* r){ r->head = r->tail = 0u; }
-static bool ring_push(ipc_ring_t* r, const ipc_pkt_t* p)
-{
-    uint32_t h = r->head, t = r->tail;
-    if ((h - t) >= IPC_RING_P2) return false;
-    r->buf[h & IPC_RING_MASK] = *p;
-    mem_barrier();
-    r->head = h + 1u;
-    return true;
-}
-static bool ring_pop(ipc_ring_t* r, ipc_pkt_t* out)
-{
-    uint32_t t = r->tail, h = r->head;
-    if (t == h) return false;
-    *out = r->buf[t & IPC_RING_MASK];
-    r->tail = t + 1u;
-    return true;
-}
+
 
 void ipc_simple_init_cpu2(void)
 {
-    // ISR para INT_IPC_1
+    /* bind ISR via driverlib or PIE (your choice) */
     Interrupt_register(INT_IPC_1, &ipc_cpu2_isr);
     Interrupt_enable(INT_IPC_1);
 
@@ -217,7 +194,7 @@ void ipc_simple_init_cpu2(void)
     s_cpu2_next_seq = 1u;
 }
 
-// CPU2 tambÃ©m pode enfileirar para CPU1
+/* CPU2 can also enqueue to CPU1 (for commands) */
 bool ipc_enqueue_to_cpu1(uint8_t cmd, const void* payload, uint8_t len)
 {
     ipc_pkt_t p;
@@ -229,7 +206,7 @@ bool ipc_enqueue_to_cpu1(uint8_t cmd, const void* payload, uint8_t len)
     return ring_push(&s_txq_c2_to_c1, &p);
 }
 
-// CPU2 tenta esvaziar sua fila p/ CPU1
+/* CPU2 drains its queue to CPU1 */
 void ipc_service_cpu2(void)
 {
     uint8_t i;
@@ -258,7 +235,7 @@ void ipc_service_cpu2(void)
     cli_log_info1(line);
 }
 
-// ISR de recepÃ§Ã£o da CPU2 (C1 -> C2)
+/* ISR (CPU2) – receive from CPU1 and log/dispatch */
 __interrupt void ipc_cpu2_isr(void)
 {
     uint8_t i;
@@ -285,7 +262,7 @@ __interrupt void ipc_cpu2_isr(void)
                     if ((t32 - last_t32) > 0x8000u) { t32 = (base + 0x10000u) | t16; }
                     last_t32 = t32;
 
-                    // envia ao CLI
+                    // send ao CLI
                     if (cli_log_info) {
                         char line[64];
                         int n = 0;
@@ -333,12 +310,12 @@ __interrupt void ipc_cpu2_isr(void)
                     break;
             }
 
-            // espelha ACK e sinaliza â€œprocessadoâ€�
+            /* mirror ACK and optionally ring back */
             g_c2_to_c1.ack = seq;
             IPC_setFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_C2_TO_C1);
         }
 
-        // limpa a doorbell recebida
+        /* clear received doorbell */
         IPC_ackFlagRtoL(IPC_CPU2_L_CPU1_R, IPC_FLAG_C1_TO_C2);
         IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_C1_TO_C2);
     }

@@ -352,7 +352,7 @@ extern "C" {
 #include "F2837xD_Emif_defines.h"           // Macros used for EMIF examples.
 #include "F2837xD_Gpio_defines.h"           // Macros used for GPIO support code
 #include "F2837xD_I2c_defines.h"            // Macros used for I2C examples.
-#include "F2837xD_Ipc_defines.h"            // Macros used for IPC support code.
+//#include "F2837xD_Ipc_defines.h"            // Macros used for IPC support code.
 #include "F2837xD_Pie_defines.h"            // Macros used for PIE examples.
 #include "F2837xD_Dma_defines.h"            // Macros used for DMA examples.
 #include "F2837xD_SysCtrl_defines.h"        // Macros used for LPM support code
