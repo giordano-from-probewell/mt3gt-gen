@@ -1,13 +1,9 @@
 #include "app_cpu1.h"
-#include "F28x_Project.h"
 
+#include "F28x_Project.h"
+#include "SFO_V8.h"
 #include "my_time.h"
 #include "cla1_standard_shared.h"
-
-#include "SFO_V8.h"
-
-#include "telemetry.h"
-
 #include "ipc_simple.h"
 #include "frequency.h"
 
@@ -63,8 +59,13 @@ volatile uint32_t fetchAddress;
 
 bool flag_zc = false; //zero crossing mark
 
+int c1,p1,l1;
 
+void ipc_on_cmd_from_cpu2(uint8_t cmd, const uint8_t* payload, uint8_t len)
+{
 
+    ipc_log_event_from_cpu1(500, cmd, (uint16_t)(my_time(NULL)&0xFFFF));
+}
 
 
 
@@ -76,13 +77,13 @@ static void cpu1_idle   (application_t *app, my_time_t now)
 
 static void cpu1_start  (application_t *app, my_time_t now)
 {
-    ipc_simple_init_cpu1();
-    tlm_init_writer((app_telemetry_block_t*)&cpu1_wr);
+
     app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
 }
 
 static void cpu1_running(application_t *app, my_time_t now)
 {
+
     // loop
 }
 
@@ -111,6 +112,7 @@ void app_init_cpu1(application_t *app)
     uint8_t address;
     app->sm_cpu1 = (app_sm_t){ .cur = APP_STATE_START };
 
+    ipc_simple_init_cpu1();
 
     _app_gpio_init();
 
@@ -139,22 +141,24 @@ void app_init_cpu1(application_t *app)
 }
 
 
-
+bool flag_test=false;
 
 void app_run_cpu1(application_t *app)
 {
+    ipc_service_cpu1(); //try to send msg to cpu2
+    ipc_rx_service_cpu1(); //treat incoming message from cpu2
+
+    if (flag_test)
+    {
+        ipc_buzzer_play(10);
+        int16_t cmd = 0x12;
+        ipc_log_event_from_cpu1(100/*EVT_IPC_TX 100*/, cmd, (uint16_t)(my_time(NULL)&0xFFFF));
+        flag_test = false;
+    }
+
 
     my_time_t now = my_time(NULL);
-
-    // Poll uma mensagem vinda da CPU2 e despache (se existir)
-    ipc_rx_service_cpu1();
-
-    //    // (opcional) se a CPU1 também envia para a CPU2, limpe o flag após ACK:
-    //    ipc_tx_service(); // sua função CPU1 que faz clear do C1->C2 após ver g_c2_to_c1_ack
-
     CPU1_HANDLERS[app->sm_cpu1.cur](app, now);
-
-
 }
 
 

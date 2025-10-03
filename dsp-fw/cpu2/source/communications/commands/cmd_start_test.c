@@ -29,7 +29,7 @@ int16_t cmd_start_test(uint8_t *error_category, uint8_t *error_code,uint16_t *co
     }
 
     int8_t x=0;
-    ipc_send_to_cpu1(IPC_CMD_START_TEST, &x, 1);
+    ipc_enqueue_to_cpu1(IPC_CMD_START_TEST, &x, 1);
 
 
 

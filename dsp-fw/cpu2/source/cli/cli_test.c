@@ -23,8 +23,6 @@ static void _handle_menu(cli_menu_t *menu, const my_time_t now, int16_t rcv, gen
     menu->machine.state = STATE_CLI_DATA_HEADER;
     menu->scheduling = now;
     *ret = STATUS_PROCESSING;
-
-
 }
 
 

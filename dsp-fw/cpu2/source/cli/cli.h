@@ -8,9 +8,11 @@
 #include "generic_definitions.h"
 
 #define CLI_TEXT_BOX_SIZE 15*80
+
+#define CLI_LOG_POOL_BYTES (2048u)  //2k for cli messages
 #define CLI_LOG_RING_SIZE 64u
 #define CLI_LOG_MSG_LEN   64u
-#define CLI_LOG_POOL_BYTES (2048u)
+
 
 typedef enum states_cli_test_en
 {

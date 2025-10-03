@@ -1,6 +1,5 @@
 #include "cli.h"
 #include <stdarg.h>
-#include "cli_main_menu.h"
 #include "probewell_ascii.h"
 #include "types.h"
 #include "F28x_Project.h"
@@ -10,7 +9,6 @@
 #include "application.h"
 #include "generic_definitions.h"
 
-#include "cli_main_menu.h"
 #include "cli_test_control1.h"
 #include "cli_test.h"
 
@@ -32,12 +30,19 @@ const unsigned char escUnderline[] = {0x1B, 0x5B, '^', '[', '[', '4' ,'m'};
 const unsigned char escNoCharAttributes[] = {0x1B, 0x5B, '^', '[', '[', '0' ,'m'};
 
 
+#ifndef CLI_LOG_RING_SIZE
+#define CLI_LOG_RING_SIZE 64u
+#endif
+#define CLI_LOG_MSG_LEN   64u
 
 static bool s_log_header_done = false;
 static bool s_quick_menu_printed = false;
 
 static uint8_t  s_panel_log_lines = 0;     // 0=off; 4 recommended
+static uint16_t s_clear_log_lines = 0;
+
 static uint32_t s_quick_menu_until_ms = 0;
+
 
 #define QUICK_MENU_DURATION_MS 1000
 
@@ -56,9 +61,8 @@ typedef struct {
 cli_transmission_t _cli_tx;
 
 cli_menu_t _cli_map[] = {
-  { .initialized=NULL, .tx=&_cli_tx, .handler=cli_main_menu_handler, .menu_key='?', .title="Main Menu"   },
-  { .initialized=NULL, .tx=&_cli_tx, .handler=cli_control1_handler,  .menu_key='c', .title="Control"     },
-  { .initialized=NULL, .tx=&_cli_tx, .handler=cli_test_menu_handler, .menu_key='m', .title="Menu Test" },
+  { .initialized=NULL, .tx=&_cli_tx, .handler=cli_control1_handler,  .menu_key='c', .title="Control"   },
+  { .initialized=NULL, .tx=&_cli_tx, .handler=cli_test_menu_handler, .menu_key='m', .title="Menu test" },
 };
 
 
@@ -105,7 +109,6 @@ static void _draw_logo(void)
                 SCI_writeCharBlockingNonFIFO(CLI_SERIALPORT,'\n');
                 indexX=0;
                 indexY++;
-
             }
         }
     }
@@ -287,6 +290,7 @@ generic_status_t cli_processing (const my_time_t now)
         return STATUS_PROCESSING;
     }
 
+
     cmd = -1;
     if(SCI_isDataAvailableNonFIFO(CLI_SERIALPORT))
     {
@@ -467,19 +471,34 @@ static uint16_t _log_count(void)
 
 void cli_set_panel_log_lines(uint8_t n)
 {
+    if(n == 0) s_clear_log_lines = s_panel_log_lines;
     s_panel_log_lines = n > 8 ? 8 : n;
 }
 
 int cli_render_tail_log(char* out, int max)
 {
     uint16_t i;
+    int n = 0;
+
+    if ( s_clear_log_lines )
+    {
+        n += update_display_clear_line(out);
+
+        // N LOG lines
+        for (i=0; i<s_clear_log_lines; ++i) {
+            n += update_display_move_down(out+n,1);
+            n += update_display_clear_line(out+n);
+        }
+        s_clear_log_lines = 0;
+        return n;
+    }
     if (!s_panel_log_lines) return 0;
 
        cli_log_entry_t tmp[8];
        uint16_t cnt = _log_copy_last(s_panel_log_lines, tmp); // do not consume from ring
        if (cnt > s_panel_log_lines) cnt = s_panel_log_lines;
 
-       int n = 0;
+       n=0;
        // title
        n += update_display_clear_line(out+n);
        n += snprintf(out+n, max-n, "---- LOG (last %u) ----\r\n", cnt);
@@ -581,3 +600,4 @@ void print_line(char *buf, int *pn, const char *fmt, ...)
     va_end(ap);
     *pn += snprintf(&(buf[*pn]), CLI_TEXT_BOX_SIZE - *pn, "\r\n");
 }
+

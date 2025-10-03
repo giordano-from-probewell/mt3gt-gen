@@ -1,8 +1,6 @@
 #ifndef APPLICATON_H_
 #define APPLICATON_H_
 
-
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -18,7 +16,6 @@
 #include "fw_info.h"
 #include "status.h"
 #include "identification.h"
-#include "telemetry.h"
 
 #include "ada4254.h"
 #include "buzzer.h"
@@ -243,8 +240,6 @@ typedef struct application_st
 
 
 extern const fw_data_t fw_info;
-extern volatile app_telemetry_block_t cpu1_wr;
-extern volatile app_telemetry_block_t cpu2_wr;
 extern application_t app;
 
 #ifdef CPU1
@@ -275,13 +270,6 @@ static inline void app_sm_set(app_sm_t *sm, app_state_t s, my_time_t now) {
         sm->enter_count[(int)s]++;
         sm->last_change_ms = (uint32_t)now;
 
-#ifdef CPU1
-        tlm_inc(&cpu1_wr.cnt.state_transitions);
-        tlm_push_event((app_telemetry_block_t*)&cpu1_wr, now, EVT_STATE, s);
-#elif defined(CPU2)
-        tlm_inc(&cpu2_wr.cnt.state_transitions);
-        tlm_push_event((app_telemetry_block_t*)&cpu2_wr, now, EVT_STATE, s);
-#endif
 
     }
 }

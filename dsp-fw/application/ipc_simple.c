@@ -3,120 +3,148 @@
 #include "F2837xD_Ipc_drivers.h"
 #include <string.h>
 #include "buzzer.h"
+#include "ipc.h"
 #include "application.h"
 
-// Place one instance of each mailbox in MSGRAM segments.
-// Both CPUs compile this; linker maps to the correct shared RAMs.
-
+// ---- Mailboxes in MSGRAM () ----
+// both CPUs compile; linker maps RAMs.
 #pragma DATA_SECTION(g_c1_to_c2, "MSGRAM_CPU1_TO_CPU2")
 volatile ipc_pkt_t g_c1_to_c2;
 #pragma DATA_SECTION(g_c2_to_c1, "MSGRAM_CPU2_TO_CPU1")
 volatile ipc_pkt_t g_c2_to_c1;
 
-static volatile uint8_t s_cpu1_next_seq = 0;  // CPU1 toggles when sending
-static volatile uint8_t s_cpu1_last_ack = 0;  // mirrored by CPU2
+// ---- Local ring for CPU (assync send) ----
+#pragma DATA_SECTION(s_txq_c1_to_c2, "MSGRAM_CPU1_TO_CPU2")
+volatile ipc_ring_t s_txq_c1_to_c2;   // CPU1
+#pragma DATA_SECTION(s_txq_c2_to_c1, "MSGRAM_CPU2_TO_CPU1")
+volatile ipc_ring_t s_txq_c2_to_c1;   // CPU2
+
+// Seqs (producer updates)
+static volatile uint8_t s_cpu1_next_seq = 1u; // CPU1 -> CPU2
+static volatile uint8_t s_cpu2_next_seq = 1u; // CPU2 -> CPU1
+
+// simple barrier (seq before publish)
+static inline void mem_barrier(void) { __asm(" RPT #7 || NOP"); }
 
 
-// ---------------- CPU1 side ----------------
+// =========================== CPU1 ===========================
 #if defined(CPU1)
 
-void ipc_simple_init_cpu1(void)
+//// Weak callback
+//#if defined(__TI_COMPILER_VERSION__)
+//#pragma WEAK(ipc_on_cmd_from_cpu2)
+//#endif
+//__attribute__((weak)) void ipc_on_cmd_from_cpu2(uint8_t cmd, const uint8_t* payload, uint8_t len)
+//{
+//    (void)cmd; (void)payload; (void)len;
+//}
+
+// Reset ring
+static inline void ring_reset(ipc_ring_t* r){ r->head = r->tail = 0u; }
+
+// Send to ring (return false if full)
+static bool ring_push(ipc_ring_t* r, const ipc_pkt_t* p)
 {
-    // Clear flags from previous boots
-    IPC_clearFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_ALL);
-
-    // Zero mailboxes
-    memset((void*)&g_c1_to_c2, 0, sizeof(g_c1_to_c2));
-    memset((void*)&g_c2_to_c1, 0, sizeof(g_c2_to_c1));
-
-    s_cpu1_next_seq = 1;
-    s_cpu1_last_ack = 0;
-
-    // CPU1 will just SEND and (optionally) poll ack. No ISR needed on CPU1 unless you want it.
-    // If you want an interrupt when CPU2 acks (FLAG2), register INT_IPC_1 here on CPU1, too.
-}
-
-bool ipc_send_to_cpu2(uint8_t cmd, const void* payload, uint8_t len)
-{
-    uint8_t i;
-    if (len > 6U) return false;
-
-    //busy
-    if (IPC_isFlagBusyLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_C1_TO_C2)) {
-        return false;
-    }
-
-
-    // Fill packet (write data first, then seq)
-    g_c1_to_c2.cmd = cmd;
-    g_c1_to_c2.len = len;
-    if (len) {
-        const uint8_t* p = (const uint8_t*)payload;
-        for (i = 0; i < len; ++i) g_c1_to_c2.payload[i] = p[i];
-    }
-    // optional: zero unused payload to ease debug
-    for (i = len; i < 6U; ++i) g_c1_to_c2.payload[i] = 0;
-
-    g_c1_to_c2.seq = s_cpu1_next_seq;  // publish message
-
-    // Ring doorbell to CPU2
-    IPC_setFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_C1_TO_C2);
-
-    tlm_inc(&cpu1_wr.cnt.ipc_c1_to_c2_tx);
-    tlm_push_event((app_telemetry_block_t*)&cpu1_wr, my_time(NULL), EVT_IPC_TX, /*cmd*/ 1);
-
-    // Prepare next seq toggle
-    s_cpu1_next_seq += 1;
+    uint32_t h = r->head, t = r->tail;
+    if ((h - t) >= IPC_RING_P2) return false; // cheio
+    r->buf[h & IPC_RING_MASK] = *p;
+    mem_barrier();
+    r->head = h + 1u;
     return true;
 }
 
-bool ipc_cpu2_ack_received(void)
+// Get from ring (return false if no data)
+static bool ring_pop(ipc_ring_t* r, ipc_pkt_t* out)
 {
-    // CPU2 mirrors 'ack = seq' after processing
-    uint8_t last_sent = (uint8_t)(s_cpu1_next_seq - 1U);
-    bool ret = (g_c2_to_c1.ack == last_sent);
-    return ret;
+    uint32_t t = r->tail, h = r->head;
+    if (t == h) return false;
+    *out = r->buf[t & IPC_RING_MASK];
+    r->tail = t + 1u;
+    return true;
 }
 
-
-
-
-// Stub fraco: se vocÃª fornecer uma definiÃ§Ã£o no seu app, o linker usarÃ¡ a sua.
-#if defined(__TI_COMPILER_VERSION__)
-#pragma WEAK(ipc_on_cmd_from_cpu2)
-#endif
-__attribute__((weak)) void ipc_on_cmd_from_cpu2(uint8_t cmd, const uint8_t* payload, uint8_t len)
+void ipc_simple_init_cpu1(void)
 {
-    (void)cmd; (void)payload; (void)len; // default: nada
+    // clean flags
+    IPC_clearFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_ALL);
+    IPC_ackFlagRtoL(IPC_CPU1_L_CPU2_R, IPC_FLAG_ALL);
+
+    // clean mailboxes
+    memset((void*)&g_c1_to_c2, 0, sizeof(g_c1_to_c2));
+    memset((void*)&g_c2_to_c1, 0, sizeof(g_c2_to_c1));
+
+    // clean ring and seq
+    ring_reset(&s_txq_c1_to_c2);
+    s_cpu1_next_seq = 1u;
 }
 
+// Enqueue (non blocking). If len>6 -> false.
+bool ipc_enqueue_to_cpu2(uint8_t cmd, const void* payload, uint8_t len)
+{
+    ipc_pkt_t p;
+    uint8_t i;
 
-// Estado local de recepÃ§Ã£o na CPU1
+    if (len > 6u) return false;
+
+    p.seq = 0; // fill at send
+    p.ack = 0;
+    p.cmd = cmd;
+    p.len = len;
+    for (i = 0; i < len; ++i) p.payload[i] = ((const uint8_t*)payload)[i];
+    for (; i < 6u; ++i) p.payload[i] = 0;
+
+    return ring_push(&s_txq_c1_to_c2, &p);
+}
+
+// Try to send first pkt to CPU2 (if doorbell is free)
+void ipc_service_cpu1(void)
+{
+    uint8_t i;
+    ipc_pkt_t p;
+
+    // Doorbell busy? nothing to do.
+    if (IPC_isFlagBusyLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_C1_TO_C2)) {
+        return;
+    }
+    // Nada na fila? sai.
+    if (!ring_pop(&s_txq_c1_to_c2, &p)) {
+        return;
+    }
+
+    // Fill mailbox (data first, seq after)
+    g_c1_to_c2.cmd = p.cmd;
+    g_c1_to_c2.len = p.len;
+    for (i = 0; i < 6u; ++i) g_c1_to_c2.payload[i] = p.payload[i];
+
+    g_c1_to_c2.seq = s_cpu1_next_seq;
+    mem_barrier();
+    IPC_setFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_C1_TO_C2);
+
+    s_cpu1_next_seq += 1u;
+}
+
+// RX CPU2->CPU1 (pooling mode)
 static uint8_t s_cpu1_last_seq = 0;
 static bool    s_cpu1_has_last = false;
 
-
-// LÃª uma nova mensagem (se houver). NÃ£o bloqueia.
 bool ipc_try_receive_from_cpu2(uint8_t* out_cmd,
                                uint8_t* out_payload,
                                uint8_t* out_len)
 {
-    int8_t i;
-    // Algum flag ativo vindo da CPU2? (do ponto de vista da CPU1 Ã© R->L)
+    uint8_t i;
+
+    // Alguma doorbell da CPU2 ativa?
     if (!IPC_isFlagBusyRtoL(IPC_CPU1_L_CPU2_R, IPC_FLAG_C2_TO_C1)) {
-        return false; // nada novo
+        return false;
     }
 
     uint8_t seq = g_c2_to_c1.seq;
-
-    // Evita reprocessar a mesma mensagem se o flag ainda nÃ£o foi limpo
     if (s_cpu1_has_last && seq == s_cpu1_last_seq) {
-        // JÃ¡ consumimos esta; ainda assim faÃ§a ACK do flag para liberar a outra CPU
+        // jÃ¡ consumido; libera flag e sai
         IPC_ackFlagRtoL(IPC_CPU1_L_CPU2_R, IPC_FLAG_C2_TO_C1);
         return false;
     }
 
-    // Snapshot do pacote
     uint8_t cmd = g_c2_to_c1.cmd;
     uint8_t len = g_c2_to_c1.len;
     if (len > 6u) len = 6u;
@@ -127,142 +155,155 @@ bool ipc_try_receive_from_cpu2(uint8_t* out_cmd,
         for (i = 0; i < len; ++i) out_payload[i] = g_c2_to_c1.payload[i];
     }
 
-    // Marca consumido e escreve ACK em MSGRAM que a CPU2 consegue ler
+    // espelha ACK para a CPU2 ler
     s_cpu1_last_seq = seq;
     s_cpu1_has_last = true;
     g_c1_to_c2.ack  = seq;
 
-    // Receptor: dÃ¡ ACK no flag recebido (R->L). (Quem limpa Ã© o emissor.)
+    // libera a doorbell recebida
     IPC_ackFlagRtoL(IPC_CPU1_L_CPU2_R, IPC_FLAG_C2_TO_C1);
-
     return true;
 }
 
-// ServiÃ§o â€œdirigido por callbackâ€�: chama o handler se houver msg nova.
 void ipc_rx_service_cpu1(void)
 {
     uint8_t cmd, len, pl[6];
-
     if (ipc_try_receive_from_cpu2(&cmd, pl, &len)) {
+        // seu app trata aqui (callback fraco por padrÃ£o)
         ipc_on_cmd_from_cpu2(cmd, pl, len);
-
-        tlm_inc(&cpu1_wr.cnt.ipc_c2_to_c1_rx);
-        tlm_push_event((app_telemetry_block_t*)&cpu1_wr, my_time(NULL), EVT_IPC_RX, /*cmd*/ 2);
-
-        if(cmd == IPC_CMD_SET_CURRENT_RANGE)
-        {
-            flag_new_range = true;
-            new_range = pl[0];
-
-        }
-
-        if(cmd == IPC_CMD_SET_CAL)
-        {
-            flag_new_calibration = true;
-            new_cal_parameter = pl[0];
-            new_cal_phase = pl[1];
-            new_cal_index = pl[2];
-
-        }
-
-        if(cmd == IPC_CMD_RESET_TEST)
-        {
-            flag_reset_test = true;
-
-        }
-
-        if(cmd == IPC_CMD_START_TEST)
-        {
-            flag_start_test = true;
-
-        }
-
-        if(cmd == IPC_CMD_RESET_METRICS)
-        {
-            flag_reset_metrics = true;
-
-        }
     }
 }
 
-
-
-
-// ---------------- CPU2 side ----------------
-
+// =========================== CPU2 ===========================
 #elif defined(CPU2)
 
-
+#include "interrupt.h"
+// Se quiser imprimir no CLI:
+extern void cli_log_info(const char* s);
+extern void cli_log_info1(const char* s);
+// Reset ring
+static inline void ring_reset(ipc_ring_t* r){ r->head = r->tail = 0u; }
+static bool ring_push(ipc_ring_t* r, const ipc_pkt_t* p)
+{
+    uint32_t h = r->head, t = r->tail;
+    if ((h - t) >= IPC_RING_P2) return false;
+    r->buf[h & IPC_RING_MASK] = *p;
+    mem_barrier();
+    r->head = h + 1u;
+    return true;
+}
+static bool ring_pop(ipc_ring_t* r, ipc_pkt_t* out)
+{
+    uint32_t t = r->tail, h = r->head;
+    if (t == h) return false;
+    *out = r->buf[t & IPC_RING_MASK];
+    r->tail = t + 1u;
+    return true;
+}
 
 void ipc_simple_init_cpu2(void)
 {
-
+    // ISR para INT_IPC_1
     Interrupt_register(INT_IPC_1, &ipc_cpu2_isr);
     Interrupt_enable(INT_IPC_1);
 
     IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_ALL);
     IPC_ackFlagRtoL(IPC_CPU2_L_CPU1_R, IPC_FLAG_ALL);
 
-    // Zera as duas mailboxes na MSGRAM compartilhada
     memset((void*)&g_c1_to_c2, 0, sizeof(g_c1_to_c2));
     memset((void*)&g_c2_to_c1, 0, sizeof(g_c2_to_c1));
+
+    ring_reset(&s_txq_c2_to_c1);
+    s_cpu2_next_seq = 1u;
 }
 
+// CPU2 tambÃ©m pode enfileirar para CPU1
+bool ipc_enqueue_to_cpu1(uint8_t cmd, const void* payload, uint8_t len)
+{
+    ipc_pkt_t p;
+    uint8_t i;
+    if (len > 6u) return false;
+    p.seq = 0; p.ack = 0; p.cmd = cmd; p.len = len;
+    for (i = 0; i < len; ++i) p.payload[i] = ((const uint8_t*)payload)[i];
+    for (; i < 6u; ++i) p.payload[i] = 0;
+    return ring_push(&s_txq_c2_to_c1, &p);
+}
 
-static volatile uint8_t s_cpu2_next_seq = 1;
-
-bool ipc_send_to_cpu1(uint8_t cmd, const void* payload, uint8_t len)
+// CPU2 tenta esvaziar sua fila p/ CPU1
+void ipc_service_cpu2(void)
 {
     uint8_t i;
-    if (len > 6U) return false;
-
-    // CPU2->CPU1 usa o doorbell IPC_FLAG_C2_TO_C1 na direï¿½ï¿½o L->R (a partir da CPU2)
+    ipc_pkt_t p;
     if (IPC_isFlagBusyLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_C2_TO_C1)) {
-        return false; // ainda pendente; tente de novo depois
+        return;
     }
-
-    // Preenche o pacote (dados primeiro, depois o seq)
-    g_c2_to_c1.cmd = cmd;
-    g_c2_to_c1.len = len;
-
-    if (len) {
-        const uint8_t* p = (const uint8_t*)payload;
-        for (i = 0; i < len; ++i) g_c2_to_c1.payload[i] = p[i];
+    if (!ring_pop(&s_txq_c2_to_c1, &p)) {
+        return;
     }
-    for (i = len; i < 6U; ++i) g_c2_to_c1.payload[i] = 0;
-
-    g_c2_to_c1.seq = s_cpu2_next_seq; // publica mensagem
-
-    // Toca a campainha para a CPU1
+    g_c2_to_c1.cmd = p.cmd;
+    g_c2_to_c1.len = p.len;
+    for (i = 0; i < 6u; ++i) g_c2_to_c1.payload[i] = p.payload[i];
+    g_c2_to_c1.seq = s_cpu2_next_seq;
+    mem_barrier();
     IPC_setFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_C2_TO_C1);
+    s_cpu2_next_seq += 1u;
 
-    tlm_inc(&cpu1_wr.cnt.ipc_c2_to_c1_rx);
-    tlm_push_event((app_telemetry_block_t*)&cpu2_wr, my_time(NULL), EVT_IPC_RX, /*cmd*/ 2);
 
-    s_cpu2_next_seq += 1;
-    return true;
+    char line[64];
+    int n = 0;
+    n += snprintf(&line[n], sizeof(line)-n, "%lu ", (unsigned long)0);
+    n += snprintf(&line[n], sizeof(line)-n, "IPC_TX ");
+    n += snprintf(&line[n], sizeof(line)-n, "d=0x%04X", (unsigned)p.cmd);
+
+    cli_log_info1(line);
 }
 
-// Hook this ISR to INT_IPC_1 on CPU2
+// ISR de recepÃ§Ã£o da CPU2 (C1 -> C2)
 __interrupt void ipc_cpu2_isr(void)
 {
     uint8_t i;
-    // Check/clear the doorbell from CPU1
     if (IPC_isFlagBusyRtoL(IPC_CPU2_L_CPU1_R, IPC_FLAG_C1_TO_C2)) {
-        // New message?
+
         uint8_t seq = g_c1_to_c2.seq;
         if (seq != g_c1_to_c2.ack) {
-            // Snapshot fields
+            // Snapshot
             uint8_t cmd = g_c1_to_c2.cmd;
             uint8_t len = g_c1_to_c2.len;
             uint8_t pl[6];
-            for (i = 0; i < 6; ++i) pl[i] = g_c1_to_c2.payload[i];
+            for (i = 0; i < 6u; ++i) pl[i] = g_c1_to_c2.payload[i];
 
-            // --- dispatch ---
+            // --- Dispatch / Log ---
             switch (cmd) {
-                case IPC_CMD_BUZZER_PLAY:
-                    if (len >= 1)
-                    {
+                case IPC_CMD_LOG_EVT: {
+                    uint16_t code = (uint16_t)(pl[0] | ((uint16_t)pl[1] << 8));
+                    uint16_t data = (uint16_t)(pl[2] | ((uint16_t)pl[3] << 8));
+                    uint16_t t16  = (uint16_t)(pl[4] | ((uint16_t)pl[5] << 8));
+                    // unwrap simples 16->32
+                    static uint32_t last_t32 = 0;
+                    uint32_t base = last_t32 & 0xFFFF0000u;
+                    uint32_t t32  = base | t16;
+                    if ((t32 - last_t32) > 0x8000u) { t32 = (base + 0x10000u) | t16; }
+                    last_t32 = t32;
+
+                    // envia ao CLI
+                    if (cli_log_info) {
+                        char line[64];
+                        int n = 0;
+                        n += snprintf(&line[n], sizeof(line)-n, "%lu ", (unsigned long)t32);
+                        switch (code) {
+                            case 100: n += snprintf(&line[n], sizeof(line)-n, "IPC_TX "); break;
+                            case 101: n += snprintf(&line[n], sizeof(line)-n, "IPC_RX "); break;
+                            case 200: n += snprintf(&line[n], sizeof(line)-n, "STATE  "); break;
+                            default:  n += snprintf(&line[n], sizeof(line)-n, "EVT%u ", (unsigned)code); break;
+                        }
+                        n += snprintf(&line[n], sizeof(line)-n, "d=0x%04X", (unsigned)data);
+                        cli_log_info(line);
+                    }
+                    break;
+                }
+                case IPC_CMD_BUZZER_PLAY: {
+                    if (len >= 1) {
+
                         const note_t* song = NULL;
                         switch (pl[0])
                         {
@@ -281,24 +322,23 @@ __interrupt void ipc_cpu2_isr(void)
                         case 12: song = star_wars; break;
                         default: song = event_beep; break;
                         }
+                        extern void buzzer_enqueue(const note_t *song);
                         buzzer_enqueue(song);
 
-                        tlm_inc(&cpu1_wr.cnt.ipc_c2_to_c1_rx);
-                        tlm_push_event((app_telemetry_block_t*)&cpu2_wr, my_time(NULL), EVT_IPC_RX, /*cmd*/ 2);
                     }
                     break;
+                }
                 case IPC_CMD_NOP:
                 default:
                     break;
             }
-            // ACK by mirroring seq
-            g_c2_to_c1.ack = seq;
 
-            // Optionally ring back to CPU1 to say "processed"
+            // espelha ACK e sinaliza â€œprocessadoâ€�
+            g_c2_to_c1.ack = seq;
             IPC_setFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_C2_TO_C1);
         }
 
-        // Ack and clear the incoming flag
+        // limpa a doorbell recebida
         IPC_ackFlagRtoL(IPC_CPU2_L_CPU1_R, IPC_FLAG_C1_TO_C2);
         IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_C1_TO_C2);
     }
@@ -308,5 +348,5 @@ __interrupt void ipc_cpu2_isr(void)
 }
 
 #else
-#  error "Macro CPU1 or CPU2 undefined!"
+#  error "Need definition: CPU1 or CPU2!"
 #endif

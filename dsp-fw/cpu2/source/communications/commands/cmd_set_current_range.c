@@ -72,7 +72,7 @@ int16_t cmd_current_range(uint8_t *error_category, uint8_t *error_code,uint16_t 
 //    }
 
 
-    ipc_send_to_cpu1(IPC_CMD_SET_CURRENT_RANGE, &range, 1);
+    ipc_enqueue_to_cpu1(IPC_CMD_SET_CURRENT_RANGE, &range, 1);
 
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);

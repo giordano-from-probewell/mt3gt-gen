@@ -35,13 +35,6 @@ const fw_data_t fw_info =
 };
 
 
-#pragma DATA_SECTION(cpu1_wr, "MSGRAM_CPU1_TO_CPU2")
-#pragma DATA_ALIGN(cpu1_wr, 2)
-volatile app_telemetry_block_t cpu1_wr;
-
-#pragma DATA_SECTION(cpu2_wr, "MSGRAM_CPU2_TO_CPU1")
-#pragma DATA_ALIGN(cpu2_wr, 2)
-volatile app_telemetry_block_t cpu2_wr;
 
 #pragma DATA_SECTION(sm_cpu2, "app_data_cpu2");
 app_sm_t sm_cpu2;
@@ -63,6 +56,16 @@ bool flag_start_test = false;
 bool flag_reset_test = false;
 bool flag_reset_metrics = false;
 
+static void ipc_sync_cpu1(void)
+{
+
+    IpcRegs.IPCCLR.all = 0xFFFFFFFFUL;
+    IpcRegs.IPCSET.bit.IPC0 = 1;
+    while (IpcRegs.IPCSTS.bit.IPC0 == 0) {}
+    IpcRegs.IPCCLR.bit.IPC0 = 1;
+}
+
+
 static inline void init_abi(application_t *a) {
     a->abi.magic   = ABI_MAGIC;
     a->abi.version = ABI_VERSION;
@@ -78,6 +81,15 @@ static inline void init_abi(application_t *a) {
 #ifndef APP_ADDR_EXPECT
 #define APP_ADDR_EXPECT ((uintptr_t)0x000C000u)  /* from linker file .cmd */
 #endif
+
+static void ipc_sync_cpu2(void)
+{
+    IpcRegs.IPCCLR.all = 0xFFFFFFFFUL;
+    while (IpcRegs.IPCSTS.bit.IPC0 == 0) {}
+    IpcRegs.IPCSET.bit.IPC0 = 1;
+
+
+}
 
 static inline bool abi_ready(const application_t *a) {
 
@@ -112,9 +124,6 @@ generic_status_t app_init(application_t * this_app)
 
 #ifdef CPU1
     {
-        // Clear any IPC flags if set already
-        IPC_clearFlagLtoR(IPC_CPU1_L_CPU2_R, IPC_FLAG_ALL);
-
 
         init_abi(this_app);
 
@@ -122,21 +131,19 @@ generic_status_t app_init(application_t * this_app)
         /*ret = */app_init_cpu1(this_app);
 
         // Synchronize both the cores
-        IPC_sync(IPC_CPU1_L_CPU2_R, SYNC_FLAG);
+        ipc_sync_cpu1();
+
 
     }
 #elif defined(CPU2)
     {
 
-        // Clear any IPC flags if set already
-        IPC_clearFlagLtoR(IPC_CPU2_L_CPU1_R, IPC_FLAG_ALL);
 
         // Enable Global Interrupt (INTM) and real time interrupt (DBGM)
         EINT;
         ERTM;
 
-        // Synchronize both the cores.
-        IPC_sync(IPC_CPU2_L_CPU1_R, SYNC_FLAG);
+        ipc_sync_cpu2();
 
         check_abi(this_app);
 

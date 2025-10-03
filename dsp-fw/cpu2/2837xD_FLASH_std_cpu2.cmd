@@ -153,29 +153,12 @@ SECTIONS
                          RUN_END(_RamfuncsRunEnd),
                          PAGE = 0, ALIGN(8)
 
-   	/* The following section definitions are required when using the IPC API Drivers */
-    GROUP :> CPU1TOCPU2RAM, PAGE = 1
-    {
-        GETBUFFER :    TYPE = DSECT
-        GETWRITEIDX :  TYPE = DSECT
-        PUTREADIDX :   TYPE = DSECT
-    }
-
-  	GROUP :> CPU2TOCPU1RAM, PAGE = 1
-    {
-        PUTBUFFER
-        PUTWRITEIDX
-        GETREADIDX
-    }
 
     MSGRAM_CPU1_TO_CPU2 : > CPU1TOCPU2RAM, type=NOINIT
     MSGRAM_CPU2_TO_CPU1 : > CPU2TOCPU1RAM, type=NOINIT
-
-
 //// CPU END ////
 
-//// CLA INIT  ////
-
+//// CLA INIT ////
    Cla1Prog         :  fill = 0x5555 //fill value for holes
                        {
                          .+=0x4;  // empty space at head of section

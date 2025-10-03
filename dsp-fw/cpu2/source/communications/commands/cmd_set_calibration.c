@@ -63,7 +63,7 @@ int16_t cmd_set_calibration(uint8_t *error_category, uint8_t *error_code,uint16_
 
 
     uint8_t new_cal[3] = {parameter, phase1, index};
-    ipc_send_to_cpu1(IPC_CMD_SET_CAL, &new_cal, 3);
+    ipc_enqueue_to_cpu1(IPC_CMD_SET_CAL, &new_cal, 3);
 
 
 

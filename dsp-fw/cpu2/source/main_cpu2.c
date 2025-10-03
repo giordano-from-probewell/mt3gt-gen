@@ -7,7 +7,6 @@
 
 #include "driverlib.h"
 #include "device.h"
-#include "ipc.h"
 
 #include "generic_definitions.h"
 #include "application.h"
