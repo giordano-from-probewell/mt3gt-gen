@@ -62,10 +62,11 @@ log_store_if_t log_store_ram(void)
  * -------------------------------------------------------------------------- */
 bool log_seed_fake_logs(log_handle_t* h, uint32_t count)
 {
+    uint32_t i;
     if (!h) return false;
     if (count == 0) count = 20;
 
-    for (uint32_t i = 0; i < count; ++i) {
+    for (i = 0; i < count; ++i) {
         char line[24];
         int n = 0;
 
@@ -100,11 +101,12 @@ bool log_fetch_last_nth(log_handle_t* h, uint32_t n, log_slot_disk_t* out)
  * -------------------------------------------------------------------------- */
 bool log_find_by_counter(log_handle_t* h, uint32_t counter, log_slot_disk_t* out)
 {
+    uint32_t i ;
     if (!h || !out) return false;
     if (h->hdr.counter == 0) return false; /* empty */
 
     /* We need the storage ops to read arbitrary slots. */
-    for (uint32_t i = 0; i < h->hdr.max_logs; ++i) {
+    for (i = 0; i < h->hdr.max_logs; ++i) {
         /* Walk indices from the most recent backwards, so we usually stop early. */
         uint32_t idx = (h->hdr.wr_index + h->hdr.max_logs - 1u - i) % h->hdr.max_logs;
         uint32_t addr = h->base_addr + sizeof(log_header_disk_t) + (idx * LOG_SLOT_BYTES);

@@ -202,8 +202,8 @@ void Device_enableAllPeripherals(void)
     //SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_EQEP2);
     //SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_EQEP3);
 
-    //SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_SD1);
-    //SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_SD2);
+    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_SD1);
+    SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_SD2);
 
     SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_SCIA);
     SysCtl_enablePeripheral(SYSCTL_PERIPH_CLK_SCIB);

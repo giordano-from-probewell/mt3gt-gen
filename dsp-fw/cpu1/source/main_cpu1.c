@@ -12,7 +12,6 @@
 #include "generic_definitions.h"
 #include "application.h"
 
-#include "cla1_standard_shared.h"
 
 #include "external_sdram.h"
 
@@ -49,7 +48,6 @@ __interrupt void wakeup_isr(void);
 
 void main(void)
 {
-
     //Initialize device clock and peripherals
     Device_init();
 

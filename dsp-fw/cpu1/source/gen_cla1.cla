@@ -1,0 +1,478 @@
+#include  "gen_cla1_shared.h"
+#include "F2837xD_cla.h"
+#include "F2837xD_piectrl.h"
+#include "F2837xD_sdfm_drivers.h"
+#include "F2837xD_struct.h"
+
+
+#define CLA_DEBUG       1
+#define PIEACK_GROUP5   0x0010
+
+#define ONE_BIT_RESOLUTION ( 0.320f / 8388608.0f ) * ( 0.5f )
+
+
+#pragma DATA_SECTION(cla_voltage_setpoint,"Cla1DataRam");
+float cla_voltage_setpoint;
+#pragma DATA_SECTION(cla_current_setpoint,"Cla1DataRam");
+float cla_current_setpoint;
+
+#pragma DATA_SECTION(cla_voltage_controller,"Cla1DataRam");
+cla_repetitive_controller_t cla_voltage_controller;
+#pragma DATA_SECTION(cla_current_controller,"Cla1DataRam");
+cla_repetitive_controller_t cla_current_controller;
+
+
+void _init_cla_voltage(void);
+void _init_cla_current(void);
+float _cla_repetitive_routine(cla_repetitive_controller_t * rep, float setpoint, float in);
+
+
+#pragma DATA_SECTION(cla_vv1,"Cla1DataRam");
+cla_measure_t cla_vv1;
+#pragma DATA_SECTION(cla_vi1,"Cla1DataRam");
+cla_measure_t cla_vi1;
+#pragma DATA_SECTION(cla_iv1,"Cla1DataRam");
+cla_measure_t cla_iv1;
+#pragma DATA_SECTION(cla_ii1,"Cla1DataRam");
+cla_measure_t cla_ii1;
+#pragma DATA_SECTION(cla_vv2,"Cla1DataRam");
+cla_measure_t cla_vv2;
+#pragma DATA_SECTION(cla_vi2,"Cla1DataRam");
+cla_measure_t cla_vi2;
+#pragma DATA_SECTION(cla_iv2,"Cla1DataRam");
+cla_measure_t cla_iv2;
+#pragma DATA_SECTION(cla_ii2,"Cla1DataRam");
+cla_measure_t cla_ii2;
+
+
+int cla_loop;
+
+// Task 1 - Main Controller
+__interrupt void Cla1Task1 ( void )
+{
+    uint32_t sdfmReadFlagRegister;
+
+#if (CLA_DEBUG==1)
+    __mdebugstop();
+#endif
+
+
+    GpioDataRegs.GPCSET.bit.GPIO94 = 1; //gpio3
+
+    sdfmReadFlagRegister = Sdfm1Regs.SDIFLG.all;    //Read SDIFLG of SDFM1
+
+
+//    if((sdfmReadFlagRegister&0x00001000)!=0)
+//        GpioDataRegs.GPASET.bit.GPIO0 = 1;
+//    if((sdfmReadFlagRegister&0x00002000)!=0)
+//        GpioDataRegs.GPASET.bit.GPIO1 = 1;
+//    if((sdfmReadFlagRegister&0x00004000)!=0)
+//        GpioDataRegs.GPASET.bit.GPIO2 = 1;
+//    if((sdfmReadFlagRegister&0x00008000)!=0)
+//        GpioDataRegs.GPASET.bit.GPIO3 = 1;
+
+
+
+    cla_iv1.raw = SDFM1_READ_FILTER2_DATA_32BIT;
+    cla_ii1.raw = SDFM1_READ_FILTER1_DATA_32BIT;
+    cla_iv2.raw = SDFM1_READ_FILTER3_DATA_32BIT;
+    cla_ii2.raw = SDFM1_READ_FILTER4_DATA_32BIT;
+
+    cla_vv1.raw = SDFM2_READ_FILTER2_DATA_32BIT;
+    cla_vi1.raw = SDFM2_READ_FILTER1_DATA_32BIT;
+    cla_vv2.raw = SDFM2_READ_FILTER3_DATA_32BIT;
+    cla_vi2.raw = SDFM2_READ_FILTER4_DATA_32BIT;
+
+    cla_ii1.data = (((float)cla_ii1.raw) * cla_ii1.gain);
+    cla_iv1.data = (((float)cla_iv1.raw) * cla_iv1.gain);
+    cla_vi1.data = (((float)cla_vi1.raw) * cla_vi1.gain);
+    cla_vv1.data = (((float)cla_vv1.raw) * cla_vv1.gain);
+    cla_ii2.data = (((float)cla_ii2.raw) * cla_ii2.gain);
+    cla_iv2.data = (((float)cla_iv2.raw) * cla_iv2.gain);
+    cla_vi2.data = (((float)cla_vi2.raw) * cla_vi2.gain);
+    cla_vv2.data = (((float)cla_vv2.raw) * cla_vv2.gain);
+
+    cla_ii1.offset_acc += cla_ii1.data;
+    cla_iv1.offset_acc += cla_iv1.data;
+    cla_vi1.offset_acc += cla_vi1.data;
+    cla_vv1.offset_acc += cla_vv2.data;
+    cla_ii2.offset_acc += cla_ii2.data;
+    cla_iv2.offset_acc += cla_iv2.data;
+    cla_vi2.offset_acc += cla_vi2.data;
+    cla_vv2.offset_acc += cla_vv2.data;
+
+    cla_ii1.data -= cla_ii1.offset;
+    cla_iv1.data -= cla_iv1.offset;
+    cla_vi1.data -= cla_vi1.offset;
+    cla_vv1.data -= cla_vi2.offset;
+    cla_ii2.data -= cla_ii2.offset;
+    cla_iv2.data -= cla_iv2.offset;
+    cla_vi2.data -= cla_vi2.offset;
+    cla_vv2.data -= cla_vv2.offset;
+
+
+    if(++cla_loop>=1000)
+    {
+        cla_loop = 0;
+        cla_ii1.offset = cla_ii1.offset_acc/1000.0;
+        cla_iv1.offset = cla_iv1.offset_acc/1000.0;
+        cla_vi1.offset = cla_vi1.offset_acc/1000.0;
+        cla_vv1.offset = cla_vi2.offset_acc/1000.0;
+        cla_ii2.offset = cla_ii2.offset_acc/1000.0;
+        cla_iv2.offset = cla_iv2.offset_acc/1000.0;
+        cla_vi2.offset = cla_vi2.offset_acc/1000.0;
+        cla_vv2.offset = cla_vv2.offset_acc/1000.0;
+
+        cla_ii1.offset_acc = 0.0f;
+        cla_iv1.offset_acc = 0.0f;
+        cla_vi1.offset_acc = 0.0f;
+        cla_vv1.offset_acc = 0.0f;
+        cla_ii2.offset_acc = 0.0f;
+        cla_iv2.offset_acc = 0.0f;
+        cla_vi2.offset_acc = 0.0f;
+        cla_vv2.offset_acc = 0.0f;
+    }
+
+
+
+
+    if(cla_voltage_controller.state == STATE_CLA_CONTROLLER__ON)
+    {
+        _cla_repetitive_routine(&cla_voltage_controller , cla_voltage_setpoint, cla_vv2.data);
+    }
+    if(cla_current_controller.state == STATE_CLA_CONTROLLER__ON)
+    {
+        _cla_repetitive_routine(&cla_current_controller , cla_current_setpoint, cla_ii2.data);
+    }
+
+
+    Sdfm1Regs.SDIFLGCLR.all = sdfmReadFlagRegister;    //Clear SDFM1.SDIFLG register
+
+
+    GpioDataRegs.GPCCLEAR.bit.GPIO94 = 1;
+}
+
+
+// Task 2 - blink cla1 led
+__interrupt void Cla1Task2 ( void )
+{
+   ////GpioDataRegs.GPCTOGGLE.bit.GPIO94 = 1; //board led2
+}
+
+// Task 3 - USED TO START THE VOLTAGE CONTROLLER
+__interrupt void Cla1Task3 ( void )
+{
+#if (CLA_DEBUG==1)
+    __mdebugstop();
+#endif
+
+    _init_cla_voltage();
+
+    cla_voltage_controller.state = STATE_CLA_CONTROLLER__ON;
+}
+
+// Task 4 - USED TO STOP THE VOLTAGE CONTROLLER
+__interrupt void Cla1Task4 ( void )
+{
+#if (CLA_DEBUG==1)
+    __mdebugstop();
+#endif
+
+    _init_cla_voltage();
+
+    cla_voltage_controller.state = STATE_CLA_CONTROLLER__OFF;
+
+}
+
+// Task 5 - USED TO START THE CURRENT CONTROLLER
+__interrupt void Cla1Task5 ( void )
+{
+#if (CLA_DEBUG==1)
+    __mdebugstop();
+#endif
+
+    _init_cla_current();
+
+    cla_current_controller.state = STATE_CLA_CONTROLLER__ON;
+
+
+}
+
+// Task 6 - USED TO STOPT THE CURRENT CONTROLLER
+__interrupt void Cla1Task6 ( void )
+{
+#if (CLA_DEBUG==1)
+    __mdebugstop();
+#endif
+
+    _init_cla_current();
+
+    cla_current_controller.state = STATE_CLA_CONTROLLER__OFF;
+}
+
+// Task 7
+__interrupt void Cla1Task7 ( void )
+{
+
+#if (CLA_DEBUG==1)
+    __mdebugstop();
+#endif
+
+
+}
+
+// Task 8 - Boot CLA variables
+__interrupt void Cla1Task8 ( void )
+{
+
+#if (CLA_DEBUG==1)
+    __mdebugstop();
+#endif
+
+    cla_loop = 0;
+
+    cla_ii1.raw = 0;
+    cla_iv1.raw = 0;
+    cla_vv1.raw = 0;
+    cla_vi1.raw = 0;
+    cla_ii2.raw = 0;
+    cla_iv2.raw = 0;
+    cla_vv2.raw = 0;
+    cla_vi2.raw = 0;
+
+
+    cla_ii1.data = 0.0f;
+    cla_iv1.data = 0.0f;
+    cla_vv1.data = 0.0f;
+    cla_vi1.data = 0.0f;
+    cla_ii2.data = 0.0f;
+    cla_iv2.data = 0.0f;
+    cla_vv2.data = 0.0f;
+    cla_vi2.data = 0.0f;
+
+
+    cla_ii1.offset = 0.0f;
+    cla_iv1.offset = 0.0f;
+    cla_vv1.offset = 0.0f;
+    cla_vi1.offset = 0.0f;
+    cla_ii2.offset = 0.0f;
+    cla_iv2.offset = 0.0f;
+    cla_vv2.offset = 0.0f;
+    cla_vi2.offset = 0.0f;
+
+    cla_ii1.offset_acc = 0.0f;
+    cla_iv1.offset_acc = 0.0f;
+    cla_vv1.offset_acc = 0.0f;
+    cla_vi1.offset_acc = 0.0f;
+    cla_ii2.offset_acc = 0.0f;
+    cla_iv2.offset_acc = 0.0f;
+    cla_vv2.offset_acc = 0.0f;
+    cla_vi2.offset_acc = 0.0f;
+
+
+#define VGEN_GENERIC
+
+
+#ifdef VGEN1
+    cla_ii1.gain   =  ( 1.0170967 ) * ( ( 1.0 / 25.0e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_iv1.gain   =  ( 1.021239 ) * ( ( ( 30000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vv1.gain   = -( 1.016104 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vi1.gain   = -( 1.019887 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_ii2.gain   = -( 1.033994 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
+    cla_iv2.gain   =  ( 1.01524 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
+    cla_vv2.gain   = -( 1.150753 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_vi2.gain   =  ( 1.00846 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
+
+#elif defined(VGEN2)
+    cla_ii1.gain   =  ( 1.0170967 ) * ( ( 1.0 / 25.0e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_iv1.gain   =  ( 1.021239 ) * ( ( ( 30000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vv1.gain   = -( 1.016104 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vi1.gain   = -( 1.019887 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_ii2.gain   = -( 1.0278997 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
+    cla_iv2.gain   =  ( 0.993639 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
+    cla_vv2.gain   = -( 1.0132098 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_vi2.gain   =  ( 1.4396622 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
+
+
+#elif defined(VGEN3)
+    cla_ii1.gain   =  ( 1.01902913 ) * ( ( 1.0 / 25.0e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_iv1.gain   =  ( 1.01777579 ) * ( ( ( 30000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vv1.gain   = -( 1.01690988 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vi1.gain   = -( 1.120567 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_ii2.gain   = -( 1.03305785 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
+    cla_iv2.gain   =  ( 0.98055556  ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
+    cla_vv2.gain   = -( 1.01352036 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_vi2.gain   =  ( 1.43681876 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
+
+#elif defined(VGEN_GENERIC)
+    cla_ii1.gain   =  ( 1.020 ) * ( ( 1.0 / 25.0e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_iv1.gain   =  ( 1.018 ) * ( ( ( 30000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vv1.gain   = -( 1.017 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vi1.gain   = -( 1.020 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_ii2.gain   = -( 1.030 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
+    cla_iv2.gain   =  ( 0.99  ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
+    cla_vv2.gain   = -( 1.014 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_vi2.gain   =  ( 1.44) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
+
+#elif  defined(VGENCAL)
+    cla_ii1.gain   =  ( 1.0 ) * ( ( 1.0 / 25.0e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_iv1.gain   =  ( 1.0 ) * ( ( ( 30000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vv1.gain   = -( 1.0 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vi1.gain   = -( 1.0 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_ii2.gain   = -( 1.0 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
+    cla_iv2.gain   =  ( 1.0 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
+    cla_vv2.gain   = -( 1.0 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_vi2.gain   =  ( 1.0 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
+
+#else   //to search the transformer order, in feedfoward mode
+    cla_ii1.gain   =  ( 1.0 ) * ( ( 1.0 / 25.0e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_iv1.gain   =  ( 1.0 ) * ( ( ( 30000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vv1.gain   = -( 1.0 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_vi1.gain   = -( 1.0 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
+    cla_ii2.gain   = -( 1.0 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
+    cla_iv2.gain   =  ( 1.0 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
+    cla_vv2.gain   = -( 1.0 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_vi2.gain   =  ( 1.0 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
+
+
+#endif
+
+
+    cla_voltage_setpoint = 0.0;
+    cla_voltage_controller.delta      = 4;
+    //cla_voltage_controller.kre        = 4.45f;
+    cla_voltage_controller.kre        = 4.0f;
+    cla_voltage_controller.krz        = 0.7f;
+    cla_voltage_controller.krl        = 0.15f;
+
+
+    cla_current_setpoint = 0.0;
+    cla_current_controller.delta      = 4;
+    cla_current_controller.kre        = 5.0f;
+    cla_current_controller.krz        = 0.7f;
+    cla_current_controller.krl        = 0.15f;
+
+    cla_voltage_controller.state = STATE_CLA_CONTROLLER__OFF;
+    cla_current_controller.state = STATE_CLA_CONTROLLER__OFF;
+
+    _init_cla_voltage();
+
+    _init_cla_current();
+}
+
+void _init_cla_voltage(void)
+{
+    uint16_t i;
+
+    for (i=0;i<1000;i++)
+    {
+        cla_voltage_controller.v_out[i] = 0.0;
+        cla_voltage_controller.v_erro[i] = 0.0;
+    }
+
+    cla_voltage_controller.acc_in_dc  = 0.0f;
+    cla_voltage_controller.in_dc      = 0.0f;
+    cla_voltage_controller.out_dc     = 0.0f;
+    cla_voltage_controller.acc_out_dc = 0.0f;
+    cla_voltage_controller.counter    = 0;
+    cla_voltage_controller.init_flag  = 0;
+    cla_voltage_controller.z_erro    = 0.0f;
+    cla_voltage_controller.out_m1    = 0.0f;
+    cla_voltage_controller.out_0     = 0.0f;
+    cla_voltage_controller.out_p1    = 0.0f;
+    cla_voltage_controller.out       = 0.0f;
+    cla_voltage_controller.index     = 0;
+}
+
+void _init_cla_current(void)
+{
+    uint16_t i;
+
+    for (i=0;i<1000;i++)
+    {
+        cla_current_controller.v_out[i] = 0.0;
+        cla_current_controller.v_erro[i] = 0.0;
+    }
+
+    cla_current_controller.acc_in_dc  = 0.0f;
+    cla_current_controller.in_dc      = 0.0f;
+    cla_current_controller.out_dc     = 0.0f;
+    cla_current_controller.acc_out_dc = 0.0f;
+    cla_current_controller.counter    = 0;
+    cla_current_controller.init_flag  = 0;
+    cla_current_controller.z_erro    = 0.0f;
+    cla_current_controller.out_m1    = 0.0f;
+    cla_current_controller.out_0     = 0.0f;
+    cla_current_controller.out_p1    = 0.0f;
+    cla_current_controller.out       = 0.0f;
+    cla_current_controller.index     = 0;
+}
+
+
+float _cla_repetitive_routine(cla_repetitive_controller_t * rep , float setpoint,  float in)
+{
+    float erro, out;
+    int16 idx = 0;
+
+    rep->acc_in_dc += in;
+    erro = setpoint - (in - rep->in_dc); //error calc
+    rep->out_m1 = rep->out_0;
+    rep->out_0  = rep->out_p1;
+    idx = rep->index + 1;
+
+    if(idx>=1000)
+    {
+        idx = idx-1000;
+    }
+
+    rep->out_p1 = rep->v_out[idx];
+    idx = rep->index + rep->delta;
+
+    if(idx>=1000)
+    {
+        idx = idx-1000;
+    }
+
+    rep->z_erro = rep->v_erro[idx];
+
+
+    if ( rep->init_flag )
+    {
+        out = rep->kre * rep->z_erro + rep->krz * rep->out_0 + rep->krl * (rep->out_m1 + rep->out_p1);
+    }
+    else
+    {
+        out = 0.0;
+        if (rep->counter++ > 1000)
+        {
+            rep->init_flag=1;
+        }
+    }
+
+    rep->acc_out_dc += out;
+
+    if (rep->index == 1000 - 1 ) // fechou um ciclo
+    {
+        // calculate average from input and output to compensate (to use in a transformer)
+        rep->out_dc = rep->acc_out_dc / 1000.0 ;
+        rep->acc_out_dc = 0;
+        rep->in_dc = rep->acc_in_dc / 1000.0 ;
+        rep->acc_in_dc = 0;
+    }
+
+    rep->v_out[rep->index] = out;
+    rep->v_erro[rep->index] = erro;
+
+    rep->index++;                 //index inc is controlled outside to keep voltage and current synchronized
+
+    if(rep->index >= 1000)
+    {
+        rep->index = 0;
+    }
+
+
+    rep->out = out - rep->out_dc;
+    return  0.0;//rep->out ;
+
+}
+

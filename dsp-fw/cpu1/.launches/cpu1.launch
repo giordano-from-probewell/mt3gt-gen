@@ -49,7 +49,7 @@
     <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.TMS320F28377D.ccxml.Texas Instruments XDS2xx USB Debug Probe_0/CPU1_CLA1" value="C:\GITHUB\mt3gt-standard-meter\dsp-fw\cpu1\CPU1_FLASH\cpu1.out"/>
     <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.TMS320F28379D.ccxml.Texas Instruments XDS2xx USB Debug Probe/C28xx_CPU1" value="${build_artifact:cpu1}"/>
     <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.TMS320F28379D.ccxml.Texas Instruments XDS2xx USB Debug Probe/C28xx_CPU2" value="${build_artifact:cpu2}"/>
-    <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.TMS320F28379D.ccxml.Texas Instruments XDS2xx USB Debug Probe/CPU1_CLA1" value="C:\GITHUB\MT3GT-PW\mt3gt-standard-meter\dsp-fw\cpu1\CPU1_FLASH\cpu1.out"/>
+    <stringAttribute key="com.ti.ccstudio.debug.debugModel.MRU_PROGRAM.TMS320F28379D.ccxml.Texas Instruments XDS2xx USB Debug Probe/CPU1_CLA1" value="C:\GITHUB\mt3gt-gen\dsp-fw\cpu1\CPU1_FLASH\cpu1.out"/>
     <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
         <listEntry value="/cpu1"/>
     </listAttribute>

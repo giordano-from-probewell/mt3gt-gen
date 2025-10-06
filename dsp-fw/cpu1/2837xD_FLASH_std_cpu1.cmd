@@ -23,7 +23,7 @@ PAGE 0 :  /* Program Memory */
    RAMD0_1          : origin = 0x00B000, length = 0x001000
    //RAMD0          : origin = 0x00B000, length = 0x000800
    //RAMD1          : origin = 0x00B800, length = 0x000800
-   RAMLS_CLA1_PROG  : origin = 0x008000, length = 0x001800
+   RAMLS_CLA1_PROG  : origin = 0x008000, length = 0x001000
    //RAMLS0         : origin = 0x008000, length = 0x000800
    //RAMLS1         : origin = 0x008800, length = 0x000800
    //RAMLS2         : origin = 0x009000, length = 0x000800
@@ -64,8 +64,8 @@ PAGE 1 : /* Data Memory */
    //RAMD1         : origin = 0x00B800, length = 0x000800
    //RAMLS0        : origin = 0x008000, length = 0x000800
    //RAMLS1        : origin = 0x008800, length = 0x000800
+   RAMLS_CLA1_DATA : origin = 0x009000, length = 0x002000
    //RAMLS2        : origin = 0x009000, length = 0x000800
-   RAMLS_CLA1_DATA : origin = 0x009800, length = 0x001800
    //RAMLS3        : origin = 0x009800, length = 0x000800
    //RAMLS4        : origin = 0x00A000, length = 0x000800
    //RAMLS5        : origin = 0x00A800, length = 0x000800

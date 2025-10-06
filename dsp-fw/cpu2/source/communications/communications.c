@@ -43,18 +43,6 @@ static const command_comm_map_t _cmd_map[] =
 {
  { .handler = cmd_ping,                            .number = COMMAND_PING                           , },
  { .handler = cmd_identify,                        .number = COMMAND_IDENTIFY                       , },
- { .handler = cmd_start_tx_pulse,                  .number = COMMAND_START_TX_PULSE                 , },
- { .handler = cmd_set_kh,                          .number = COMMAND_SET_KH                         , },
- { .handler = cmd_get_kh,                          .number = COMMAND_GET_KH                         , },
- { .handler = cmd_start_test,                      .number = COMMAND_START_TEST                     , },
- { .handler = cmd_reset_test,                      .number = COMMAND_RESET_TEST                     , },
- { .handler = cmd_get_measures,                    .number = COMMAND_GET_MEASURES                   , },
- { .handler = cmd_get_inst_measures,               .number = COMMAND_GET_INST_MEASURES              , },
- { .handler = cmd_change_factor,                   .number = COMMAND_CHANGE_FACTOR                  , },
- { .handler = cmd_current_range,                   .number = COMMAND_CURRENT_RANGE                  , },
- { .handler = cmd_get_calibrations,                .number = COMMAND_GET_CALIBRATIONS               , },
- { .handler = cmd_get_calibration,                 .number = COMMAND_GET_CALIBRATION                , },
- { .handler = cmd_set_calibration,                 .number = COMMAND_SET_CALIBRATION                , },
 };
 
 

@@ -1,9 +1,10 @@
 #include "app_cpu1.h"
 
 #include "F28x_Project.h"
+#include "F2837xD_sdfm_drivers.h"
 #include "SFO_V8.h"
 #include "my_time.h"
-#include "cla1_standard_shared.h"
+#include "gen_cla1_shared.h"
 #include "ipc_simple.h"
 #include "frequency.h"
 
@@ -32,10 +33,13 @@ void _app_gpio_init(void);
 
 void _cla1_init(void);
 void _cla1_interruption_config(void);
+void _cla1_memory_config(void);
+void _cla1_link_from_sdfm(void);
+void _sdfm_init(void);
 
 __interrupt void access_violation(void);
 __interrupt void xint1_isr(void);
-
+__interrupt void _sdfm_isr(void);
 
 __interrupt void Cla1Task1();
 __interrupt void Cla1Task2();
@@ -78,6 +82,54 @@ static void cpu1_idle   (application_t *app, my_time_t now)
 static void cpu1_start  (application_t *app, my_time_t now)
 {
 
+
+    GPIO_writePin(FB_EN_PIN, 1);
+    _cla1_link_from_sdfm();
+    _cla1_init();
+    _cla1_memory_config();
+    _cla1_interruption_config();
+    Cla1ForceTask8andWait();
+
+    _sdfm_init();
+
+    // Enable global Interrupts and higher priority real-time debug events:
+    EINT;   // Enable Global interrupt INTM
+    ERTM;   // Enable Global realtime interrupt DBGM
+
+    GPIO_writePin(SDFM_CLK_SEL_PIN,0);                              // SDFM_CLK_SEL: 0 from ext STD; 1 from int SI5351
+    GPIO_writePin(CLK_AUX_OE_PIN,1);                                // CLK_AUX_OE = 1 clk out enabled
+
+
+
+
+    GPIO_writePin(BRIDGE_V_EN_PIN, 1);
+    GPIO_writePin(BRIDGE_I_EN_PIN, 1);
+
+
+
+
+
+//    gen_sm_turning_on();
+//
+//    setupInverter(
+//            INV_PWM1_VOLTAGE,
+//            INV_PWM2_VOLTAGE,
+//            INV_PWM2_CURRENT,
+//            INV_PWM1_CURRENT,
+//            INV_PWM_PERIOD,
+//            INV_DEADBAND_PWM_COUNT
+//    );
+//
+//
+//    if(init_feedback(SDFM_CLK_HRPWM_BASE,app.generation.config.generation_freq) != STATUS_DONE)
+//    {
+//        update_display_raw(" Amplifiers error");
+//        boot_error = true;
+//    }
+//    else{
+//        update_display_raw(" Amplifiers ok");
+//    }
+
     app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
 }
 
@@ -109,21 +161,18 @@ static const state_handler_t CPU1_HANDLERS[] =
 void app_init_cpu1(application_t *app)
 {
 
-    uint8_t address;
+    uint8_t address=0;
     app->sm_cpu1 = (app_sm_t){ .cur = APP_STATE_START };
 
     ipc_simple_init_cpu1();
 
     _app_gpio_init();
 
-    _cla1_init();
 
     if(GPIO_ReadPin(MY_ADDR_PIN0) == 1 )
         address|=0b001;
     if(GPIO_ReadPin(MY_ADDR_PIN1) == 1 )
         address|=0b010;
-    if(GPIO_ReadPin(MY_ADDR_PIN2) == 1 )
-        address|=0b100;
 
     app->id.data.full.my_address = address;
 
@@ -166,27 +215,27 @@ void app_run_cpu1(application_t *app)
 void _app_gpio_init(void)
 {
 
-    GPIO_setPadConfig(GPIO_DEBUG_0, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(GPIO_DEBUG_0, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(GPIO_DEBUG_0, GPIO_QUAL_ASYNC);
-    GPIO_setPinConfig(GPIO_DEBUG_0_CONFIG);
-    GPIO_setMasterCore(GPIO_DEBUG_0, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(USR_GPIO0, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(USR_GPIO0, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(USR_GPIO0, GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(USR_GPIO0_PIN_CONFIG);
+    GPIO_setMasterCore(USR_GPIO0, GPIO_CORE_CPU1);
 
-    GPIO_setPadConfig(GPIO_DEBUG_1, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(GPIO_DEBUG_1, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(GPIO_DEBUG_1, GPIO_QUAL_ASYNC);
-    GPIO_setPinConfig(GPIO_DEBUG_1_CONFIG);
-    GPIO_setMasterCore(GPIO_DEBUG_1, GPIO_CORE_CPU1_CLA1);
+    GPIO_setPadConfig(USR_GPIO1, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(USR_GPIO1, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(USR_GPIO1, GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(USR_GPIO1_PIN_CONFIG);
+    GPIO_setMasterCore(USR_GPIO1, GPIO_CORE_CPU1);
 
-    GPIO_setPadConfig(GPIO_DEBUG_2, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(GPIO_DEBUG_2, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(GPIO_DEBUG_2, GPIO_QUAL_ASYNC);
-    GPIO_setPinConfig(GPIO_DEBUG_2_CONFIG);
-    GPIO_setMasterCore(GPIO_DEBUG_2, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(USR_GPIO2, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(USR_GPIO2, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(USR_GPIO2, GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(USR_GPIO2_PIN_CONFIG);
+    GPIO_setMasterCore(USR_GPIO2, GPIO_CORE_CPU1_CLA1);
 
-    GPIO_WritePin(GPIO_DEBUG_0, 0);
-    GPIO_WritePin(GPIO_DEBUG_1, 0);
-    GPIO_WritePin(GPIO_DEBUG_2, 0);
+    GPIO_WritePin(USR_GPIO0, 0);
+    GPIO_WritePin(USR_GPIO1, 0);
+    GPIO_WritePin(USR_GPIO2, 0);
 
 
     GPIO_setPadConfig(MY_ADDR_PIN0, GPIO_PIN_TYPE_STD);
@@ -197,103 +246,35 @@ void _app_gpio_init(void)
     GPIO_setDirectionMode(MY_ADDR_PIN1, GPIO_DIR_MODE_IN);
     GPIO_setQualificationMode(MY_ADDR_PIN1, GPIO_QUAL_6SAMPLE);
     GPIO_setPinConfig(MY_ADDR_PIN1_CONFIG);
-    GPIO_setPadConfig(MY_ADDR_PIN2, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(MY_ADDR_PIN2, GPIO_DIR_MODE_IN);
-    GPIO_setQualificationMode(MY_ADDR_PIN2, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(MY_ADDR_PIN2_CONFIG);
 
-    GPIO_setPadConfig(CLKGEN_ON, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(CLKGEN_ON, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(CLKGEN_ON, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(CLKGEN_ON_CONFIG);
-    GPIO_WritePin(CLKGEN_ON, 1);
 
-    GPIO_setPadConfig(CLKGEN_ADS_SEL_IN, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(CLKGEN_ADS_SEL_IN, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(CLKGEN_ADS_SEL_IN, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(CLKGEN_ADS_SEL_IN_CONFIG);
-    GPIO_WritePin(CLKGEN_ADS_SEL_IN, 1);
 
-    GPIO_setPadConfig(CLKGEN_ADS_SEL1_OUT, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(CLKGEN_ADS_SEL1_OUT, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(CLKGEN_ADS_SEL1_OUT, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(CLKGEN_ADS_SEL1_OUT_CONFIG);
-    GPIO_WritePin(CLKGEN_ADS_SEL1_OUT, 1);
-
-    GPIO_setPadConfig(CLKGEN_ADS_SEL2_OUT, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(CLKGEN_ADS_SEL2_OUT, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(CLKGEN_ADS_SEL2_OUT, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(CLKGEN_ADS_SEL2_OUT_CONFIG);
-    GPIO_WritePin(CLKGEN_ADS_SEL2_OUT, 0);
-
-    GPIO_setPadConfig(CLKGEN_BSP_ENA, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(CLKGEN_BSP_ENA, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(CLKGEN_BSP_ENA, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(CLKGEN_BSP_ENA_CONFIG);
-    GPIO_WritePin(CLKGEN_BSP_ENA, 1);
-
-    //    //fs 106
-    //    GPIO_setPadConfig(106, GPIO_PIN_TYPE_STD);
-    //    GPIO_setDirectionMode(106, GPIO_DIR_MODE_OUT);
-    //    GPIO_setQualificationMode(106,GPIO_QUAL_6SAMPLE);
-    //    GPIO_setPinConfig(GPIO_106_GPIO106);
-    //    GPIO_WritePin(106, 1);
-    //    //ssc0 107
-    //    GPIO_setPadConfig(107, GPIO_PIN_TYPE_STD);
-    //    GPIO_setDirectionMode(107, GPIO_DIR_MODE_OUT);
-    //    GPIO_setQualificationMode(107,GPIO_QUAL_6SAMPLE);
-    //    GPIO_setPinConfig(GPIO_107_GPIO107);
-    //    GPIO_WritePin(107, 0);
-    //    //ssc1 167
-    //    GPIO_setPadConfig(167, GPIO_PIN_TYPE_STD);
-    //    GPIO_setDirectionMode(167, GPIO_DIR_MODE_OUT);
-    //    GPIO_setQualificationMode(167,GPIO_QUAL_6SAMPLE);
-    //    GPIO_setPinConfig(GPIO_167_GPIO167);
-    //    GPIO_WritePin(167, 0);
-
-    GPIO_setPadConfig(Si5341B_RST, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(Si5341B_RST, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(Si5341B_RST, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(Si5341B_RST_CONFIG);
-    GPIO_WritePin(Si5341B_RST, 0);
-
-    GPIO_setPadConfig(Si5341B_OE, GPIO_PIN_TYPE_STD);
-    GPIO_setDirectionMode(Si5341B_OE, GPIO_DIR_MODE_OUT);
-    GPIO_setQualificationMode(Si5341B_OE, GPIO_QUAL_6SAMPLE);
-    GPIO_setPinConfig(Si5341B_OE_CONFIG);
-    GPIO_WritePin(Si5341B_OE, 0);
 
     // I2C
     {
-        // I2CA -> clock to ADS1278
-        GPIO_setDirectionMode(SDA_ADS, GPIO_DIR_MODE_OUT);
-        GPIO_setPadConfig(SDA_ADS, GPIO_PIN_TYPE_STD);
-        GPIO_setMasterCore(SDA_ADS, GPIO_CORE_CPU1);
-        GPIO_setQualificationMode(SDA_ADS, GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(SDA_ADS_CONFIG);
-        GPIO_setMasterCore(SDA_ADS, GPIO_CORE_CPU1);
+        //I2CA - EEPROM and TMP75
+        GPIO_setMasterCore(SDAB_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(SDAB_PIN, GPIO_PIN_TYPE_PULLUP);
+        GPIO_setDirectionMode(SDAB_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(SDAB_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(SDAB_PIN_CONFIG);
+        GPIO_setMasterCore(SCLB_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(SCLB_PIN, GPIO_PIN_TYPE_PULLUP);
+        GPIO_setDirectionMode(SCLB_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(SCLB_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(SCLB_PIN_CONFIG);
 
-        GPIO_setDirectionMode(SCL_ADS, GPIO_DIR_MODE_OUT);
-        GPIO_setPadConfig(SCL_ADS, GPIO_PIN_TYPE_STD);
-        GPIO_setMasterCore(SCL_ADS, GPIO_CORE_CPU1);
-        GPIO_setQualificationMode(SCL_ADS, GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(SCL_ADS_CONFIG);
-        GPIO_setMasterCore(SCL_ADS, GPIO_CORE_CPU1);
-
-        // I2Cb -> clock to Generators
-        GPIO_setDirectionMode(SDA_GEN, GPIO_DIR_MODE_OUT);
-        GPIO_setPadConfig(SDA_GEN, GPIO_PIN_TYPE_PULLUP);
-        GPIO_setMasterCore(SDA_GEN, GPIO_CORE_CPU1);
-        GPIO_setQualificationMode(SDA_GEN, GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(SDA_GEN_CONFIG);
-        GPIO_setMasterCore(SDA_GEN, GPIO_CORE_CPU1);
-
-        GPIO_setDirectionMode(SCL_GEN, GPIO_DIR_MODE_OUT);
-        GPIO_setPadConfig(SCL_GEN, GPIO_PIN_TYPE_PULLUP);
-        GPIO_setMasterCore(SCL_GEN, GPIO_CORE_CPU1);
-        GPIO_setQualificationMode(SCL_GEN, GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(SCL_GEN_CONFIG);
-        GPIO_setMasterCore(SCL_GEN, GPIO_CORE_CPU1);
+        //I2CB - SSR
+        GPIO_setMasterCore(SDAA_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(SDAA_PIN, GPIO_PIN_TYPE_PULLUP);
+        GPIO_setDirectionMode(SDAA_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(SDAA_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(SDAA_PIN_CONFIG);
+        GPIO_setMasterCore(SCLA_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(SCLA_PIN, GPIO_PIN_TYPE_PULLUP);
+        GPIO_setDirectionMode(SCLA_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(SCLA_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(SCLA_PIN_CONFIG);
 
 
     }
@@ -331,70 +312,18 @@ void _app_gpio_init(void)
         GPIO_setMasterCore(SPIA_CLK_GPIO, GPIO_CORE_CPU1);
 
 
-        //    //SPIB
-        //    GPIO_setPinConfig(SPIB_MOSI_PIN_CONFIG);
-        //    GPIO_setPadConfig(SPIB_MOSI_GPIO, GPIO_PIN_TYPE_STD);
-        //    GPIO_setQualificationMode(SPIB_MOSI_GPIO, GPIO_QUAL_ASYNC);
-        //
-        //    GPIO_setPinConfig(SPIB_MISO_PIN_CONFIG);
-        //    GPIO_setPadConfig(SPIB_MISO_GPIO, GPIO_PIN_TYPE_STD);
-        //    GPIO_setQualificationMode(SPIB_MISO_GPIO, GPIO_QUAL_ASYNC);
-        //
-        //    GPIO_setPinConfig(SPIB_CLK_PIN_CONFIG);
-        //    GPIO_setPadConfig(SPIB_CLK_GPIO, GPIO_PIN_TYPE_STD);
-        //    GPIO_setQualificationMode(SPIB_CLK_GPIO, GPIO_QUAL_ASYNC);
-
-
-
-        //CS
-        GPIO_writePin(GPIO_PIN_CS_A1,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A1,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A1,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A1_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A1, GPIO_CORE_CPU2);
-
-        GPIO_writePin(GPIO_PIN_CS_A2,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A2,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A2,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A2_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A2, GPIO_CORE_CPU2);
-
-        GPIO_writePin(GPIO_PIN_CS_A3,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A3,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A3,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A3_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A3, GPIO_CORE_CPU2);
-
-        GPIO_writePin(GPIO_PIN_CS_A4,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A4,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A4,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A4_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A4, GPIO_CORE_CPU2);
-
-        GPIO_writePin(GPIO_PIN_CS_A5,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A5,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A5,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A5_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A5, GPIO_CORE_CPU2);
-
-        GPIO_writePin(GPIO_PIN_CS_A6,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A6,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A6,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A6_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A6, GPIO_CORE_CPU2);
-
-        GPIO_writePin(GPIO_PIN_CS_A7,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A7,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A7,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A7_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A7, GPIO_CORE_CPU2);
-
-        GPIO_writePin(GPIO_PIN_CS_A8,1);
-        GPIO_setDirectionMode(GPIO_PIN_CS_A8,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(GPIO_PIN_CS_A8,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(GPIO_PIN_CS_A8_PIN_CONFIG);
-        GPIO_setMasterCore(GPIO_PIN_CS_A8, GPIO_CORE_CPU2);
+        //SPIC
+        GPIO_setPinConfig(SPIC_MOSI_PIN_CONFIG);
+        GPIO_setPadConfig(SPIC_MOSI_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SPIC_MOSI_PIN, GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(SPIC_MISO_PIN_CONFIG);
+        GPIO_setPadConfig(SPIC_MISO_PIN, GPIO_PIN_TYPE_PULLUP);
+        GPIO_setQualificationMode(SPIC_MISO_PIN, GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(SPIC_CLK_PIN_CONFIG);
+        GPIO_setPadConfig(SPIC_CLK_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SPIC_CLK_PIN, GPIO_QUAL_ASYNC);
     }
+
 
     { //buzzer
 
@@ -404,9 +333,218 @@ void _app_gpio_init(void)
         GPIO_setPinConfig(GPIO_168_EPWM12B);
         GPIO_setMasterCore(168, GPIO_CORE_CPU2);
     }
+
+    //FB En
+    GPIO_setMasterCore(FB_EN_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(FB_EN_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(FB_EN_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(FB_EN_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(FB_EN_PIN_CONFIG);
+    //
+    //    //SDFM_CLK_MULTIPLIER
+    //    GPIO_setMasterCore(SDFM_CLK_MULT_PIN, GPIO_CORE_CPU1);
+    //    GPIO_setPadConfig(SDFM_CLK_MULT_PIN, GPIO_PIN_TYPE_STD);
+    //    GPIO_setDirectionMode(SDFM_CLK_MULT_PIN, GPIO_DIR_MODE_OUT);
+    //    GPIO_setQualificationMode(SDFM_CLK_MULT_PIN,GPIO_QUAL_ASYNC);
+    //    GPIO_setPinConfig(SDFM_CLK_MULT_PIN_CONFIG);
+
+    GPIO_setMasterCore(CLK_AUX_OE_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(CLK_AUX_OE_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(CLK_AUX_OE_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CLK_AUX_OE_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CLK_AUX_OE_PIN_CONFIG);
+
+    GPIO_setMasterCore(SDFM_CLK_SEL_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(SDFM_CLK_SEL_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(SDFM_CLK_SEL_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(SDFM_CLK_SEL_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(SDFM_CLK_SEL_PIN_CONFIG);
+
+
+    //SPI ADA4254 CS
+        GPIO_writePin(CS_VV1_PIN,1);
+        GPIO_setDirectionMode(CS_VV1_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_VV1_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_VV1_PIN_CONFIG);
+
+        GPIO_writePin(CS_VI1_PIN,1);
+        GPIO_setDirectionMode(CS_VI1_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_VI1_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_VI1_PIN_CONFIG);
+
+        GPIO_writePin(CS_IV1_PIN,1);
+        GPIO_setDirectionMode(CS_IV1_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_IV1_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_IV1_PIN_CONFIG);
+
+        GPIO_writePin(CS_II1_PIN,1);
+        GPIO_setDirectionMode(CS_II1_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_II1_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_II1_PIN_CONFIG);
+
+        GPIO_writePin(CS_VV2_PIN,1);
+        GPIO_setDirectionMode(CS_VV2_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_VV2_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_VV2_PIN_CONFIG);
+
+        GPIO_writePin(CS_VI2_PIN,1);
+        GPIO_setDirectionMode(CS_VI2_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_VI2_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_VI2_PIN_CONFIG);
+
+        GPIO_writePin(CS_IV2_PIN,1);
+        GPIO_setDirectionMode(CS_IV2_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_IV2_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_IV2_PIN_CONFIG);
+
+        GPIO_writePin(CS_II2_PIN,1);
+        GPIO_setDirectionMode(CS_II2_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(CS_II2_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(CS_II2_PIN_CONFIG);
+
+        //SDFM clk source
+        GPIO_setDirectionMode(SDFM_CLK_HRPWM_PIN,GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(SDFM_CLK_HRPWM_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPadConfig(SDFM_CLK_HRPWM_PIN, GPIO_PIN_TYPE_STD); // disable pull up
+        GPIO_setPinConfig(SDFM_CLK_HRPWM_PIN_CONFIG);
+
+        // Setup GPIO for SD
+        GPIO_setPadConfig(SDFM_D_VV1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_VV1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_VV1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_VV1_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_VV1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_VV1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_VV1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_VV1_PIN_CONFIG);
+
+        GPIO_setPadConfig(SDFM_D_VI1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_VI1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_VI1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_VI1_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_VI1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_VI1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_VI1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_VI1_PIN_CONFIG);
+
+        GPIO_setPadConfig(SDFM_D_IV1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_IV1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_IV1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_IV1_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_IV1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_IV1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_IV1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_IV1_PIN_CONFIG);
+
+        GPIO_setPadConfig(SDFM_D_II1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_II1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_II1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_II1_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_II1_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_II1_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_II1_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_II1_PIN_CONFIG);
+
+
+        GPIO_setPadConfig(SDFM_D_VV2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_VV2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_VV2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_VV2_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_VV2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_VV2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_VV2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_VV2_PIN_CONFIG);
+
+        GPIO_setPadConfig(SDFM_D_VI2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_VI2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_VI2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_VI2_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_VI2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_VI2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_VI2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_VI2_PIN_CONFIG);
+
+        GPIO_setPadConfig(SDFM_D_IV2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_IV2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_IV2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_IV2_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_IV2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_IV2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_IV2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_IV2_PIN_CONFIG);
+
+        GPIO_setPadConfig(SDFM_D_II2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_D_II2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_D_II2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_D_II2_PIN_CONFIG);
+        GPIO_setPadConfig(SDFM_C_II2_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setQualificationMode(SDFM_C_II2_PIN,GPIO_QUAL_SYNC);
+        GPIO_setDirectionMode(SDFM_C_II2_PIN, GPIO_DIR_MODE_IN);
+        GPIO_setPinConfig(SDFM_C_II2_PIN_CONFIG);
+
+        //HVBUS METER init
+        GPIO_setMasterCore(BRIDGE_V_EN_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(BRIDGE_V_EN_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(BRIDGE_V_EN_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(BRIDGE_V_EN_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(BRIDGE_V_EN_PIN_CONFIG);
+
+        GPIO_setMasterCore(BRIDGE_I_EN_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(BRIDGE_I_EN_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(BRIDGE_I_EN_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(BRIDGE_I_EN_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(BRIDGE_I_EN_PIN_CONFIG);
+
+        GPIO_writePin(HVBUS_MEAS_ENA_PIN, 1); //( 0: ON | 1: OFF )
+        GPIO_setMasterCore(HVBUS_MEAS_ENA_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(HVBUS_MEAS_ENA_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(HVBUS_MEAS_ENA_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(HVBUS_MEAS_ENA_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(HVBUS_MEAS_ENA_PIN_CONFIG);
+
+        GPIO_writePin(HVBUS_CTRL_PIN, 0);
+        GPIO_setMasterCore(HVBUS_CTRL_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(HVBUS_CTRL_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(HVBUS_CTRL_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(HVBUS_CTRL_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(HVBUS_CTRL_PIN_CONFIG);
+
+        GPIO_writePin(HVBUS_CTRL_OWNER_PIN, 0);
+        GPIO_setMasterCore(HVBUS_CTRL_OWNER_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(HVBUS_CTRL_OWNER_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(HVBUS_CTRL_OWNER_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(HVBUS_CTRL_OWNER_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(HVBUS_CTRL_OWNER_PIN_CONFIG);
+
+        GPIO_writePin(HVBUS_IFAULT_P_PIN, 0);
+        GPIO_setMasterCore(HVBUS_IFAULT_P_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(HVBUS_IFAULT_P_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(HVBUS_IFAULT_P_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(HVBUS_IFAULT_P_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(HVBUS_IFAULT_P_PIN_CONFIG);
+
+        GPIO_writePin(HVBUS_IFAULT_N_PIN, 0);
+        GPIO_setMasterCore(HVBUS_IFAULT_N_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(HVBUS_IFAULT_N_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(HVBUS_IFAULT_N_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(HVBUS_IFAULT_N_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(HVBUS_IFAULT_N_PIN_CONFIG);
+
+        GPIO_writePin(HVBUS_ZC_P_PIN, 0);
+        GPIO_setMasterCore(HVBUS_ZC_P_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(HVBUS_ZC_P_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(HVBUS_ZC_P_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(HVBUS_ZC_P_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(HVBUS_ZC_P_PIN_CONFIG);
+
+        GPIO_writePin(HVBUS_ZC_N_PIN, 0);
+        GPIO_setMasterCore(HVBUS_ZC_N_PIN, GPIO_CORE_CPU1);
+        GPIO_setPadConfig(HVBUS_ZC_N_PIN, GPIO_PIN_TYPE_STD);
+        GPIO_setDirectionMode(HVBUS_ZC_N_PIN, GPIO_DIR_MODE_OUT);
+        GPIO_setQualificationMode(HVBUS_ZC_N_PIN,GPIO_QUAL_ASYNC);
+        GPIO_setPinConfig(HVBUS_ZC_N_PIN_CONFIG);
+
 }
-
-
 
 
 
@@ -430,18 +568,6 @@ void _cla1_init(void)
     // CONNECT_SD2(TO_CPU1);       //Connect SDFM2 to CPU1
     VBUS32_1(CONNECT_TO_CLA1); // Connect VBUS32_1 (SDFM bus) to CPU1
     EDIS;
-#endif
-
-    // Configure the CLA memory spaces
-    _cla1_memory_config();
-
-#ifdef CPU1
-    // Configure the CLA task vectors for CPU1
-    _cla1_interruption_config();
-#endif
-#ifdef CPU2
-    // Configure the CLA task vectors for CPU2
-    CLA_initCpu2Cla();
 #endif
 
 }
@@ -511,7 +637,7 @@ void _cla1_interruption_config(void)
 
 }
 
-// Cla_initMemoryMap - Initialize CLA memory map
+// _cla1_memory_config - Initialize CLA memory map
 //
 void _cla1_memory_config(void)
 {
@@ -574,10 +700,268 @@ void _cla1_memory_config(void)
 }
 
 
+void _cla1_link_from_sdfm(void)
+{
+    EALLOW;
+    // Trigger Source for TASK1 of CLA1 = SDFM1
+    DmaClaSrcSelRegs.CLA1TASKSRCSEL1.bit.TASK1 = CLA_TRIG_SD1INT;
+
+    // Trigger Source for TASK1 of CLA1 = SDFM2
+    DmaClaSrcSelRegs.CLA1TASKSRCSEL1.bit.TASK2 = CLA_TRIG_SD2INT;
+
+    // Lock CLA1TASKSRCSEL1 register
+    DmaClaSrcSelRegs.CLA1TASKSRCSELLOCK.bit.CLA1TASKSRCSEL1=1;
+    EDIS;
+}
+
+void _sdfm_init(void)
+{
+    uint16_t  hlt, llt;
+    uint32_t sdfm_base;
+
+
+    // Interrupts that are used in this example are re-mapped to
+    // ISR functions found within this file.
+    Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP5);
+    Interrupt_register(INT_SD1, _sdfm_isr);
+    //Interrupt_register(INT_SD2, sdfm2ISR);
+
+
+    // Enable SDFM1 amd SDFM2 interrupts
+    //Interrupt_enable(INT_SD1);
+    //Interrupt_enable(INT_SD2);
+
+    EALLOW;
+    // Enable CPU INT5 which is connected to SDFM INT
+    IER |= M_INT11;
+    // Enable SDFM INTn in the PIE: Group 5 __interrupt 9-10
+    PieCtrlRegs.PIEIER5.bit.INTx9 = 1;  // SDFM1 interrupt enabled
+    //PieCtrlRegs.PIEIER5.bit.INTx10 = 1; // SDFM2 interrupt enabled
+    EDIS;
 
 
 
-#pragma CODE_SECTION(access_violation, "ramfuncs")
+    // Input Control Unit
+    // Configure Input Control Unit: Modulator Clock rate = Modulator data rate
+    SDFM_setupModulatorClock(SDFM1_BASE, SDFM_FILTER_1,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+    SDFM_setupModulatorClock(SDFM1_BASE, SDFM_FILTER_2,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+    SDFM_setupModulatorClock(SDFM1_BASE, SDFM_FILTER_3,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+    SDFM_setupModulatorClock(SDFM1_BASE, SDFM_FILTER_4,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+
+    SDFM_setupModulatorClock(SDFM2_BASE, SDFM_FILTER_1,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+    SDFM_setupModulatorClock(SDFM2_BASE, SDFM_FILTER_2,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+    SDFM_setupModulatorClock(SDFM2_BASE, SDFM_FILTER_3,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+    SDFM_setupModulatorClock(SDFM2_BASE, SDFM_FILTER_4,
+                             SDFM_MODULATOR_CLK_EQUAL_DATA_RATE);
+
+
+    // Input Control Module
+    // Configure Input Control Mode: Modulator Clock rate = Modulator data rate
+    Sdfm_configureInputCtrl(SDFM1, FILTER1, MODE_0);
+    Sdfm_configureInputCtrl(SDFM1, FILTER2, MODE_0);
+    Sdfm_configureInputCtrl(SDFM1, FILTER3, MODE_0);
+    Sdfm_configureInputCtrl(SDFM1, FILTER4, MODE_0);
+    Sdfm_configureInputCtrl(SDFM2, FILTER1, MODE_0);
+    Sdfm_configureInputCtrl(SDFM2, FILTER2, MODE_0);
+    Sdfm_configureInputCtrl(SDFM2, FILTER3, MODE_0);
+    Sdfm_configureInputCtrl(SDFM2, FILTER4, MODE_0);
+
+
+
+    // Comparator Unit - over and under value threshold settings
+    hlt = 0x7Ff0;
+    llt = 0x0010;
+
+    // Configure Comparator Unit's comparator filter type and comparator's
+    // OSR value, higher threshold, lower threshold
+    SDFM_configComparator(SDFM1_BASE,
+                          (SDFM_FILTER_1 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+    SDFM_configComparator(SDFM1_BASE,
+                          (SDFM_FILTER_2 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+    SDFM_configComparator(SDFM1_BASE,
+                          (SDFM_FILTER_3 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+    SDFM_configComparator(SDFM1_BASE,
+                          (SDFM_FILTER_4 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+
+    SDFM_configComparator(SDFM2_BASE,
+                          (SDFM_FILTER_1 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+    SDFM_configComparator(SDFM2_BASE,
+                          (SDFM_FILTER_2 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+    SDFM_configComparator(SDFM2_BASE,
+                          (SDFM_FILTER_3 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+    SDFM_configComparator(SDFM2_BASE,
+                          (SDFM_FILTER_4 | SDFM_FILTER_SINC_3 | SDFM_SET_OSR(32)),
+                          (SDFM_GET_LOW_THRESHOLD(llt) | SDFM_GET_HIGH_THRESHOLD(hlt)));
+
+    // Data Filter Unit
+    // Configure Data Filter Unit - filter type, OSR value and
+    // enable / disable data filter
+    Sdfm_configureData_filter(SDFM1, FILTER1, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+    Sdfm_configureData_filter(SDFM1, FILTER2, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+    Sdfm_configureData_filter(SDFM1, FILTER3, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+    Sdfm_configureData_filter(SDFM1, FILTER4, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+
+    Sdfm_configureData_filter(SDFM2, FILTER1, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+    Sdfm_configureData_filter(SDFM2, FILTER2, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+    Sdfm_configureData_filter(SDFM2, FILTER3, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+    Sdfm_configureData_filter(SDFM2, FILTER4, FILTER_ENABLE, SINC3,
+                              OSR_256, DATA_32_BIT, SHIFT_0_BITS);
+
+
+    // Enable Master filter bit: Unless this bit is set none of the filter modules
+    // can be enabled. All the filter modules are synchronized when master filter
+    // bit is enabled after individual filter modules are enabled.
+    SDFM_enableMasterFilter(SDFM1_BASE);
+    SDFM_enableMasterFilter(SDFM2_BASE);
+
+    //    // PWM11.CMPC, PWM11.CMPD, PWM12.CMPC and PWM12.CMPD signals cannot synchronize
+    //    // the filters. This option is not being used in this example.
+    //    //
+    //    Sdfm_configureExternalreset(gPeripheralNumber,FILTER_1_EXT_RESET_DISABLE,
+    //                                FILTER_2_EXT_RESET_DISABLE,
+    //                                FILTER_3_EXT_RESET_DISABLE,
+    //                                FILTER_4_EXT_RESET_DISABLE);
+    //
+    //
+    //
+    // PWM11.CMPC, PWM11.CMPD, PWM12.CMPC and PWM12.CMPD signals cannot synchronize
+    // the filters. This option is not being used in this example.
+    //
+    SDFM_disableExternalReset(SDFM1_BASE, SDFM_FILTER_1);
+    SDFM_disableExternalReset(SDFM1_BASE, SDFM_FILTER_2);
+    SDFM_disableExternalReset(SDFM1_BASE, SDFM_FILTER_3);
+    SDFM_disableExternalReset(SDFM1_BASE, SDFM_FILTER_4);
+
+    SDFM_disableExternalReset(SDFM2_BASE, SDFM_FILTER_1);
+    SDFM_disableExternalReset(SDFM2_BASE, SDFM_FILTER_2);
+    SDFM_disableExternalReset(SDFM2_BASE, SDFM_FILTER_3);
+    SDFM_disableExternalReset(SDFM2_BASE, SDFM_FILTER_4);
+
+    // Enable interrupts
+    // Following SDFM interrupts can be enabled / disabled using this function.
+    // Enable / disable comparator high threshold
+    // Enable / disable comparator low threshold
+    // Enable / disable modulator clock failure
+    // Enable / disable data filter acknowledge
+    //
+    //    SDFM_enableInterrupt(SDFM1_BASE, SDFM_FILTER_1,
+    //                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+    //                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+    SDFM_enableInterrupt(SDFM1_BASE, SDFM_FILTER_2,
+                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+    //    SDFM_enableInterrupt(SDFM1_BASE, SDFM_FILTER_3,
+    //                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+    //                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+    //    SDFM_enableInterrupt(SDFM1_BASE, SDFM_FILTER_4,
+    //                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+    //                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+    SDFM_disableInterrupt(SDFM1_BASE, SDFM_FILTER_1,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+    SDFM_disableInterrupt(SDFM1_BASE, SDFM_FILTER_2,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+    SDFM_disableInterrupt(SDFM1_BASE, SDFM_FILTER_3,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+    SDFM_disableInterrupt(SDFM1_BASE, SDFM_FILTER_4,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+
+    //    SDFM_enableInterrupt(SDFM2_BASE, SDFM_FILTER_1,
+    //                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+    //                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+    //    SDFM_enableInterrupt(SDFM2_BASE, SDFM_FILTER_2,
+    //                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+    //                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+    //    SDFM_enableInterrupt(SDFM2_BASE, SDFM_FILTER_3,
+    //                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+    //                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+    //    SDFM_enableInterrupt(SDFM2_BASE, SDFM_FILTER_4,
+    //                         (SDFM_MODULATOR_FAILURE_INTERRUPT |
+    //                                 SDFM_DATA_FILTER_ACKNOWLEDGE_INTERRUPT));
+
+    SDFM_disableInterrupt(SDFM2_BASE, SDFM_FILTER_1,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+    SDFM_disableInterrupt(SDFM2_BASE, SDFM_FILTER_2,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+    SDFM_disableInterrupt(SDFM2_BASE, SDFM_FILTER_3,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+    SDFM_disableInterrupt(SDFM2_BASE, SDFM_FILTER_4,
+                          (SDFM_HIGH_LEVEL_THRESHOLD_INTERRUPT |
+                                  SDFM_LOW_LEVEL_THRESHOLD_INTERRUPT));
+
+
+    // Enable master interrupt so that any of the filter interrupts can trigger
+    // by SDFM interrupt to CPU
+    SDFM_enableMasterInterrupt(SDFM1_BASE);
+
+    app.measures.primary.voltage.p1 =   &SDFM1_READ_FILTER1_DATA_32BIT;
+    app.measures.primary.voltage.p2 =   &SDFM1_READ_FILTER2_DATA_32BIT;
+    app.measures.primary.current.p1 =   &SDFM1_READ_FILTER3_DATA_32BIT;
+    app.measures.primary.current.p2 =   &SDFM1_READ_FILTER4_DATA_32BIT;
+
+}
+
+
+#pragma CODE_SECTION(_sdfm_isr, ".TI.ramfunc")
+__interrupt void _sdfm_isr(void)
+{
+    Uint32 sdfmReadFlagRegister = 0;
+
+    //
+    // Read SDFM flag register (SDIFLG)
+    //
+    sdfmReadFlagRegister = Sdfm_readFlagRegister(SDFM1);
+
+    if(sdfmReadFlagRegister&(~0x8000F000))
+    {
+        ESTOP0;
+    }
+
+    //
+    // Clear SDFM flag register
+    //
+    Sdfm_clearFlagRegister(SDFM1,sdfmReadFlagRegister);
+    sdfmReadFlagRegister = Sdfm_readFlagRegister(SDFM1);
+    if(sdfmReadFlagRegister != 0x0)
+    {
+        ESTOP0;
+    }
+
+    //
+    // Acknowledge this __interrupt to receive more __interrupts from group 5
+    //
+    PieCtrlRegs.PIEACK.all = PIEACK_GROUP5;
+}
+
+
+#pragma CODE_SECTION(access_violation, ".TI.ramfunc")
 __interrupt void access_violation(void)
 {
     // Read the fetch address where the violation occurred

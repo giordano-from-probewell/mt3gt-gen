@@ -150,4 +150,4 @@ encoding//CPU1_FLASH_STANDALONE/sources.mk=UTF-8
 encoding//CPU1_FLASH_STANDALONE/subdir_rules.mk=UTF-8
 encoding//CPU1_FLASH_STANDALONE/subdir_vars.mk=UTF-8
 encoding//source/application/ipc_simple.c=UTF-8
-encoding//source/cla1_standard.cla=UTF-8
+encoding//source/generation_sm.c=UTF-8

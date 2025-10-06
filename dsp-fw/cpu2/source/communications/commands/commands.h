@@ -37,18 +37,7 @@ enum command_results_en
 
 extern int16_t cmd_ping                         (uint8_t *error_category,uint8_t *error_code,uint16_t *Command,uint8_t *data,uint16_t *size);
 extern int16_t cmd_identify                     (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_start_tx_pulse               (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_get_kh                       (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_set_kh                       (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_start_test                   (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_reset_test                   (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_get_measures                 (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_get_inst_measures            (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_change_factor                (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_current_range                (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_get_calibrations             (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_get_calibration             (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
-extern int16_t cmd_set_calibration              (uint8_t *error_category,uint8_t *error_code,uint16_t *command,uint8_t *data,uint16_t *size);
+
 
 
 #endif

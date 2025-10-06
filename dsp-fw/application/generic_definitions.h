@@ -43,20 +43,7 @@ typedef  enum generic_states_en
 
 } generic_states_t;
 
-typedef struct equipment_st
-{
 
-    my_time_t scheduling;
-
-    struct  {
-        const char *initialized;
-        generic_states_t state;
-        generic_status_t status;
-
-    } machine;
-
-
-} equipment_t;
 
 
 

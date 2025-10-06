@@ -19,171 +19,278 @@
 #include "ada4254.h"
 #include "buzzer.h"
 
-
-#define IPC_CMD_SET_CAL             0x10
-#define IPC_CMD_SET_CURRENT_RANGE   0x11
-#define IPC_CMD_START_TEST          0x12
-#define IPC_CMD_RESET_TEST          0x13
-#define IPC_CMD_RESET_METRICS       0x14
+#include "reference_generation.h"
 
 
-/************************
- * Hardware Definitions *
- ************************/
 
+/* Generic All Devices Defines */
+#define ADDRESS_STD         0
+#define ADDRESS_PHASE_A     1
+#define ADDRESS_PHASE_B     2
+#define ADDRESS_PHASE_C     3
+#define ADDRESS_UNDEFINED   7
 
-#define ADA4254_A1  1
-#define ADA4254_A2  2
-#define ADA4254_A3  3
-#define ADA4254_A4  4
-#define ADA4254_A5  5
-#define ADA4254_A6  6
-#define ADA4254_A7  7
-#define ADA4254_A8  8
+#define IPC_CMD_10          0x10
+#define IPC_CMD_11          0x11
+#define IPC_CMD_12          0x12
+#define IPC_CMD_13          0x13
+#define IPC_CMD_14          0x14
 
-#define ADS178_CH1  1
-#define ADS178_CH2  2
-#define ADS178_CH3  3
-#define ADS178_CH4  4
-#define ADS178_CH5  5
-#define ADS178_CH6  6
-#define ADS178_CH7  7
-#define ADS178_CH8  8
+#define SYNC_FLAG   IPC_FLAG31
 
-
-#define SYNC_FLAG IPC_FLAG31
-
-
-#define MY_ADDR_PIN0                108
-#define MY_ADDR_PIN0_CONFIG         GPIO_108_GPIO108
-#define MY_ADDR_PIN1                109
-#define MY_ADDR_PIN1_CONFIG         GPIO_109_GPIO109
-#define MY_ADDR_PIN2                110
-#define MY_ADDR_PIN2_CONFIG         GPIO_110_GPIO110
-
-// DEBUG
-#define GPIO_DEBUG_0                4
-#define GPIO_DEBUG_0_CONFIG         GPIO_4_GPIO4
-#define GPIO_DEBUG_1                15
-#define GPIO_DEBUG_1_CONFIG         GPIO_15_GPIO15
-#define GPIO_DEBUG_2                27
-#define GPIO_DEBUG_2_CONFIG         GPIO_27_GPIO27
-
-//CLK GEN
-//CLK_GEN power enable
-#define CLKGEN_ON                  98
-#define CLKGEN_ON_CONFIG           GPIO_98_GPIO98
-//ADS clock selection input for Si5351C 0:xtal 1:ocxo
-#define CLKGEN_ADS_SEL_IN          167
-#define CLKGEN_ADS_SEL_IN_CONFIG   GPIO_167_GPIO167
-//ADS clock selection outuput from 0:Si5341B 1:Si5351C
-#define CLKGEN_ADS_SEL1_OUT        107
-#define CLKGEN_ADS_SEL1_OUT_CONFIG GPIO_107_GPIO107
-//ADS spi clock selection outuput from 0:Si5341B 1:Si5351C
-#define CLKGEN_ADS_SEL2_OUT        107
-#define CLKGEN_ADS_SEL2_OUT_CONFIG GPIO_107_GPIO107
-//ADS spi clock outuput from Si5351C 0:disable 1:enable
-#define CLKGEN_BSP_ENA              9
-#define CLKGEN_BSP_ENA_CONFIG       GPIO_9_GPIO9
-
-//Si5341B
-//CLK2_RST Si5341B
-#define Si5341B_RST                128
-#define Si5341B_RST_CONFIG         GPIO_128_GPIO128
-//CLK2_OE Si5341B
-#define Si5341B_OE                 129
-#define Si5341B_OE_CONFIG          GPIO_129_GPIO129
-
-
-//I2C
-//I2CA -> clock to ADS1278
-#define SDA_ADS                     104
-#define SDA_ADS_CONFIG              GPIO_104_SDAA
-#define SCL_ADS                     105
-#define SCL_ADS_CONFIG              GPIO_105_SCLA
-//I2Cb -> clock to Generators
-#define SDA_GEN                     34
-#define SDA_GEN_CONFIG              GPIO_34_SDAB
-#define SCL_GEN                     35
-#define SCL_GEN_CONFIG              GPIO_35_SCLB
-
+//ADDR IN MIDPLANE
+#define MY_ADDR_PIN0                    108
+#define MY_ADDR_PIN0_CONFIG             GPIO_108_GPIO108
+#define MY_ADDR_PIN1                    109
+#define MY_ADDR_PIN1_CONFIG             GPIO_109_GPIO109
 
 //CLI SERIAL PORT
-#define CLI_SERIALPORT SCID_BASE
-#define CLI_SCITX_GPIO 142
-#define CLI_SCIRX_GPIO 141
-#define CLI_SCIRX_GPIO_PIN_CONFIG GPIO_141_SCIRXDD
-#define CLI_SCITX_GPIO_PIN_CONFIG GPIO_142_SCITXDD
+#define CLI_SERIALPORT                  SCID_BASE
+#define CLI_SCITX_GPIO                  142
+#define CLI_SCIRX_GPIO                  141
+#define CLI_SCIRX_GPIO_PIN_CONFIG       GPIO_141_SCIRXDD
+#define CLI_SCITX_GPIO_PIN_CONFIG       GPIO_142_SCITXDD
 
 //COMM SERIAL PORT
-#define COMMS_SCI_BASE SCIC_BASE
-#define COMMS_SCITX_GPIO 140
-#define COMMS_SCIRX_GPIO 139
-#define COMMS_SCIRX_GPIO_PIN_CONFIG GPIO_139_SCIRXDC
-#define COMMS_SCITX_GPIO_PIN_CONFIG GPIO_140_SCITXDC
+#define COMMS_SCI_BASE                  SCIC_BASE
+#define COMMS_SCITX_GPIO                140
+#define COMMS_SCIRX_GPIO                139
+#define COMMS_SCIRX_GPIO_PIN_CONFIG     GPIO_139_SCIRXDC
+#define COMMS_SCITX_GPIO_PIN_CONFIG     GPIO_140_SCITXDC
+
+//SPI
+#define SPIA_MOSI_GPIO                  16
+#define SPIA_MOSI_PIN_CONFIG            GPIO_16_SPISIMOA
+#define SPIA_MISO_GPIO                  17
+#define SPIA_MISO_PIN_CONFIG            GPIO_17_SPISOMIA
+#define SPIA_CLK_GPIO                   18
+#define SPIA_CLK_PIN_CONFIG             GPIO_18_SPICLKA
+
+#define SPIC_MOSI_PIN                   100
+#define SPIC_MOSI_PIN_CONFIG            GPIO_100_SPISIMOC
+#define SPIC_MISO_PIN                   101
+#define SPIC_MISO_PIN_CONFIG            GPIO_101_SPISOMIC
+#define SPIC_CLK_PIN                    102
+#define SPIC_CLK_PIN_CONFIG             GPIO_102_SPICLKC
+
+//I2C
+#define SDAB_PIN                        34
+#define SDAB_PIN_CONFIG                 GPIO_34_SDAB
+#define SCLB_PIN                        35
+#define SCLB_PIN_CONFIG                 GPIO_35_SCLB
+
+#define SDAA_PIN                        104
+#define SDAA_PIN_CONFIG                 GPIO_104_SDAA
+#define SCLA_PIN                        105
+#define SCLA_PIN_CONFIG                 GPIO_105_SCLA
+
+//CAN
+#define CAN_RS                          121
+#define CAN_RS_PIN_CONFIG               GPIO_121_GPIO121
+#define CAN_EN                          33
+#define CAN_EN_PIN_CONFIG               GPIO_33_GPIO33
+#define CAN_TXA                         37
+#define CAN_TXA_PIN_CONFIG              GPIO_37_CANTXA
+#define CAN_RXA                         36
+#define CAN_RXA_PIN_CONFIG              GPIO_36_CANRXA
 
 
-// ADS1278
-#define GPIO_ADC_TEST0              154
-#define GPIO_ADC_TEST0_PIN_CONFIG   GPIO_154_GPIO154
-#define GPIO_ADC_TEST1              153
-#define GPIO_ADC_TEST1_PIN_CONFIG   GPIO_153_GPIO153
-#define GPIO_ADC_CLKDIV             147
-#define GPIO_ADC_CLKDIV_PIN_CONFIG  GPIO_147_GPIO147
-#define GPIO_ADC_NSYNC              146
-#define GPIO_ADC_NSYNC_PIN_CONFIG   GPIO_145_GPIO145
-#define GPIO_ADC_CLK_SEL            145
-#define GPIO_ADC_CLK_SEL_PIN_CONFIG GPIO_145_GPIO145
-#define GPIO_ADC_MODE0              148
-#define GPIO_ADC_MODE0_PIN_CONFIG   GPIO_148_GPIO148
-#define GPIO_ADC_MODE1              149
-#define GPIO_ADC_MODE1_PIN_CONFIG   GPIO_149_GPIO149
-#define GPIO_ADC_FORMAT0            150
-#define GPIO_ADC_FORMAT0_PIN_CONFIG GPIO_150_GPIO150
-#define GPIO_ADC_FORMAT1            151
-#define GPIO_ADC_FORMAT1_PIN_CONFIG GPIO_151_GPIO151
-#define GPIO_ADC_FORMAT2            152
-#define GPIO_ADC_FORMAT2_PIN_CONFIG GPIO_152_GPIO152
-#define GPIO_ADS_SYNC               146
-#define GPIO_ADS_SYNC_CONFIG        GPIO_146_GPIO146
+
+
+/* Device Related Defines */
+
+
+/* Power Stage Related Values*/
+#define INV_PWM_SWITCHING_FREQUENCY ((float)300000.0)
+
+#define INV_DEADBAND_NS 600
+#define INV_PWM_PERIOD ((PWMSYSCLOCK_FREQ)/(INV_PWM_SWITCHING_FREQUENCY))/2
+
+#define INV_DEADBAND_PWM_COUNT (int)((float)INV_DEADBAND_NS*(float)PWMSYSCLOCK_FREQ*1e-9)
+
+#define PWM_CH              9   // # of PWM channels + 1 -*ePWM[0] is defined as dummy value not used
+
+
+#define VOLTAGE_MAX 500.0f*1.4142f  //Vrms
+#define CURRENT_MAX 35.0f*1.4142f   //Irms
+#define VOLTAGE_MAX 500.0f*1.4142f  //Vrms
+#define FREQUENCY_MAX 70.0f
+#define FREQUENCY_MIN 40.0f
+
+//USER AND DEBUG PINS
+#define USR_GPIO0                       43
+#define USR_GPIO0_PIN_CONFIG            GPIO_43_GPIO43
+#define USR_GPIO1                       42
+#define USR_GPIO1_PIN_CONFIG            GPIO_42_GPIO42
+#define USR_GPIO2                       94
+#define USR_GPIO2_PIN_CONFIG            GPIO_94_GPIO94
+#define USR_GPIO3                       144
+#define USR_GPIO3_PIN_CONFIG            GPIO_144_GPIO144
+
+//BRIDGE
+#define INV_PWM1_VOLTAGE                   EPWM2_BASE
+#define INV_PWM1_VOLTAGE_H_PIN             2
+#define INV_PWM1_VOLTAGE_H_PIN_CONFIG      GPIO_2_EPWM2A
+#define INV_PWM1_VOLTAGE_L_PIN             3
+#define INV_PWM1_VOLTAGE_L_PIN_CONFIG      GPIO_3_EPWM2B
+
+#define INV_PWM2_VOLTAGE                   EPWM1_BASE
+#define INV_PWM2_VOLTAGE_H_PIN             0
+#define INV_PWM2_VOLTAGE_H_PIN_CONFIG      GPIO_0_EPWM1A
+#define INV_PWM2_VOLTAGE_L_PIN             1
+#define INV_PWM2_VOLTAGE_L_PIN_CONFIG      GPIO_1_EPWM1B
+
+#define INV_PWM1_CURRENT                   EPWM5_BASE
+#define INV_PWM1_CURRENT_H_PIN             8
+#define INV_PWM1_CURRENT_H_PIN_CONFIG      GPIO_8_EPWM5A
+#define INV_PWM1_CURRENT_L_PIN             9
+#define INV_PWM1_CURRENT_L_PIN_CONFIG      GPIO_9_EPWM5B
+
+#define INV_PWM2_CURRENT                   EPWM6_BASE
+#define INV_PWM2_CURRENT_H_PIN             10
+#define INV_PWM2_CURRENT_H_PIN_CONFIG      GPIO_10_EPWM6A
+#define INV_PWM2_CURRENT_L_PIN             11
+#define INV_PWM2_CURRENT_L_PIN_CONFIG      GPIO_11_EPWM6B
+
+#define BRIDGE_V_EN_PIN                 112
+#define BRIDGE_V_EN_PIN_CONFIG          GPIO_112_GPIO112
+#define BRIDGE_I_EN_PIN                 113
+#define BRIDGE_I_EN_PIN_CONFIG          GPIO_113_GPIO113
+
+
+//HV BUS METER
+#define HVBUS_MEAS_ENA_PIN              114
+#define HVBUS_MEAS_ENA_PIN_CONFIG       GPIO_114_GPIO114
+#define HVBUS_CTRL_OWNER_PIN            111
+#define HVBUS_CTRL_OWNER_PIN_CONFIG     GPIO_111_GPIO111
+#define HVBUS_CTRL_PIN                  115
+#define HVBUS_CTRL_PIN_CONFIG           GPIO_115_GPIO115
+
+#define HVBUS_IFAULT_P_PIN              12
+#define HVBUS_IFAULT_P_PIN_CONFIG       GPIO_12_GPIO12
+#define HVBUS_IFAULT_N_PIN              13
+#define HVBUS_IFAULT_N_PIN_CONFIG       GPIO_13_GPIO13
+#define HVBUS_ZC_P_PIN                  110
+#define HVBUS_ZC_P_PIN_CONFIG           GPIO_110_GPIO110
+#define HVBUS_ZC_N_PIN                  143
+#define HVBUS_ZC_N_PIN_CONFIG           GPIO_143_GPIO143
+
+
+//SDFM MULTIPLIER
+#define SDFM_CLK_HRPWM_BASE             EPWM5_BASE
+#define SDFM_CLK_HRPWM_PIN              153
+#define SDFM_CLK_HRPWM_PIN_CONFIG       GPIO_153_EPWM5A
+
+// SDFM Secondaries
+#define SDFM_D_IV1_PIN                  122
+#define SDFM_D_IV1_PIN_CONFIG           GPIO_122_SD1_D1
+#define SDFM_C_IV1_PIN                  123
+#define SDFM_C_IV1_PIN_CONFIG           GPIO_123_SD1_C1
+
+#define SDFM_D_II1_PIN                  124
+#define SDFM_D_II1_PIN_CONFIG           GPIO_124_SD1_D2
+#define SDFM_C_II1_PIN                  125
+#define SDFM_C_II1_PIN_CONFIG           GPIO_125_SD1_C2
+
+#define SDFM_D_IV2_PIN                  126
+#define SDFM_D_IV2_PIN_CONFIG           GPIO_126_SD1_D3
+#define SDFM_C_IV2_PIN                  127
+#define SDFM_C_IV2_PIN_CONFIG           GPIO_127_SD1_C3
+
+#define SDFM_D_II2_PIN                  128
+#define SDFM_D_II2_PIN_CONFIG           GPIO_128_SD1_D4
+#define SDFM_C_II2_PIN                  129
+#define SDFM_C_II2_PIN_CONFIG           GPIO_129_SD1_C4
+
+#define SDFM_D_VV1_PIN                  130
+#define SDFM_D_VV1_PIN_CONFIG           GPIO_130_SD2_D1
+#define SDFM_C_VV1_PIN                  131
+#define SDFM_C_VV1_PIN_CONFIG           GPIO_131_SD2_C1
+
+#define SDFM_D_VI1_PIN                  132
+#define SDFM_D_VI1_PIN_CONFIG           GPIO_132_SD2_D2
+#define SDFM_C_VI1_PIN                  133
+#define SDFM_C_VI1_PIN_CONFIG           GPIO_133_SD2_C2
+
+#define SDFM_D_VV2_PIN                  134
+#define SDFM_D_VV2_PIN_CONFIG           GPIO_134_SD2_D3
+#define SDFM_C_VV2_PIN                  135
+#define SDFM_C_VV2_PIN_CONFIG           GPIO_135_SD2_C3
+
+#define SDFM_D_VI2_PIN                  136
+#define SDFM_D_VI2_PIN_CONFIG           GPIO_136_SD2_D4
+#define SDFM_C_VI2_PIN                  137
+#define SDFM_C_VI2_PIN_CONFIG           GPIO_137_SD2_C4
+
+//#define SDFM_CLK_MULT_PIN             10
+//#define SDFM_CLK_MULT_PIN_CONFIG      GPIO_10_GPIO10
+#define CLK_AUX_OE_PIN                  107
+#define CLK_AUX_OE_PIN_CONFIG           GPIO_107_GPIO107
+#define SDFM_CLK_SEL_PIN                96
+#define SDFM_CLK_SEL_PIN_CONFIG         GPIO_96_GPIO96
+
 
 // ADA
-#define GPIO_PIN_SPIA_MOSI          16
-#define SPIA_MOSI_GPIO              16
-#define SPIA_MOSI_PIN_CONFIG        GPIO_16_SPISIMOA
-#define GPIO_PIN_SPIA_MISO          17
-#define SPIA_MISO_GPIO              17
-#define SPIA_MISO_PIN_CONFIG        GPIO_17_SPISOMIA
-#define GPIO_PIN_SPIA_CLK           18
-#define SPIA_CLK_GPIO               18
-#define SPIA_CLK_PIN_CONFIG         GPIO_18_SPICLKA
+#define CS_VV2_PIN                   160
+#define CS_VV2_PIN_CONFIG            GPIO_160_GPIO160
+#define CS_VI2_PIN                   159
+#define CS_VI2_PIN_CONFIG            GPIO_159_GPIO159
+#define CS_IV2_PIN                   152
+#define CS_IV2_PIN_CONFIG            GPIO_152_GPIO152
+#define CS_II2_PIN                   151
+#define CS_II2_PIN_CONFIG            GPIO_151_GPIO151
+#define CS_VV1_PIN                   148
+#define CS_VV1_PIN_CONFIG            GPIO_148_GPIO148
+#define CS_VI1_PIN                   147
+#define CS_VI1_PIN_CONFIG            GPIO_147_GPIO147
+#define CS_IV1_PIN                   150
+#define CS_IV1_PIN_CONFIG            GPIO_150_GPIO150
+#define CS_II1_PIN                   149
+#define CS_II1_PIN_CONFIG            GPIO_149_GPIO149
+
+//FB
+#define FB_EN_PIN                       167                 // FB_V_EN and FB_I_EN merged
+#define FB_EN_PIN_CONFIG                GPIO_167_GPIO167
+
+#define FB_CLK_AUX_OE                   107
+#define FB_CLK_AUX_OE_PIN_CONFIG        GPIO_107_GPIO107
+#define FB_CLK_AUX_FS1                  99
+#define FB_CLK_AUX_FS1_PIN_CONFIG       GPIO_99_GPIO99
+#define FB_CLK_AUX_FS2                  116
+#define FB_CLK_AUX_FS2_PIN_CONFIG       GPIO_116_GPIO116
+
+#define FB_CLK_ERR                      97
+#define FB_CLK_ERR_PIN_CONFIG           GPIO_97_GPIO97
 
 
-#define GPIO_PIN_CS_A1             161
-#define GPIO_PIN_CS_A1_PIN_CONFIG  GPIO_161_GPIO161
-#define GPIO_PIN_CS_A2             162
-#define GPIO_PIN_CS_A2_PIN_CONFIG  GPIO_162_GPIO162
-#define GPIO_PIN_CS_A3             163
-#define GPIO_PIN_CS_A3_PIN_CONFIG  GPIO_163_GPIO163
-#define GPIO_PIN_CS_A4             164
-#define GPIO_PIN_CS_A4_PIN_CONFIG  GPIO_164_GPIO164
-#define GPIO_PIN_CS_A5             165
-#define GPIO_PIN_CS_A5_PIN_CONFIG  GPIO_165_GPIO165
-#define GPIO_PIN_CS_A6             166
-#define GPIO_PIN_CS_A6_PIN_CONFIG  GPIO_166_GPIO166
-#define GPIO_PIN_CS_A7             122
-#define GPIO_PIN_CS_A7_PIN_CONFIG  GPIO_122_GPIO122
-#define GPIO_PIN_CS_A8             158
-#define GPIO_PIN_CS_A8_PIN_CONFIG  GPIO_158_GPIO158
+typedef enum ada4254_channel_st
+{
+    ADA4254_VV1      =      0u,
+    ADA4254_VI1      =      1u,
+    ADA4254_IV1      =      2u,
+    ADA4254_II1      =      3u,
+    ADA4254_VV2      =      4u,
+    ADA4254_VI2      =      5u,
+    ADA4254_IV2      =      6u,
+    ADA4254_II2      =      7u
+} ada4254_channel_t;
 
-//PULSE IN
-#define PULSE_IN_GPIO_PIN          6U
-#define PULSE_IN_GPIO_CFG          GPIO_6_GPIO6
+#define ADDRESS_STD         0
+#define ADDRESS_PHASE_A     1
+#define ADDRESS_PHASE_B     2
+#define ADDRESS_PHASE_C     3
+#define ADDRESS_UNDEFINED   7
 
-//PULSE OUT
-#define PULSE_OUT_GPIO_PIN         10U
-#define PULSE_OUT_GPIO_CFG         GPIO_10_GPIO10
 
+
+#define VOLTAGE_MAX 500.0f*1.4142f  //Vrms
+#define CURRENT_MAX 35.0f*1.4142f   //Irms
+#define VOLTAGE_MAX 500.0f*1.4142f  //Vrms
+#define FREQUENCY_MAX 70.0f
+#define FREQUENCY_MIN 40.0f
+
+#define CALIBRATION_CURRENT_GAINS           (6)
+#define CONFIG__SERIAL_NUMBER_SIZE          (16)
 
 typedef enum {
     APP_STATE_IDLE = 0,
@@ -228,13 +335,140 @@ typedef struct {
 } app_sm_t;
 
 
+typedef struct feedback_st
+{
+        volatile int32_t* p1;
+        volatile int32_t* p2;
+        ada4254_t voltage_gain, current_gain;
+
+        float32_t voltage_rms;
+        float32_t voltage_avg;
+        float32_t voltage_ppeak;
+        float32_t voltage_npeak;
+
+        float32_t current_rms;
+        float32_t current_avg;
+        float32_t current_ppeak;
+        float32_t current_npeak;
+
+        float32_t power_sum;
+        float32_t power;
+
+        float32_t impedance;
+
+        float32_t setpoint_rms;
+        float32_t ctrl_erro_rms;
+
+        float32_t voltage[1000];
+        float32_t current[1000];
+
+
+} feedback_t;
+
+typedef enum mode_en
+{
+    MODE_OFF                        = 0,
+    MODE_NONE                       = 1,
+    MODE_START                      = 2,
+    MODE_FEEDFORWARD                = 3,
+    MODE_SFRA                       = 4,
+    MODE_REPETITIVE                 = 7,
+    MODE_REPETITIVE_FROM_CLA        = 8,
+} mode_t;
+
+typedef enum generation_sm_type_en
+{
+    GENERATING_VOLTAGE     = 'V',
+    GENERATING_CURRENT     = 'I'
+
+} generation_sm_type_t;
+
+
+typedef struct waveform_generation_st
+{
+    my_time_t scheduling;
+    reference_generation_t ref;
+    struct  {
+
+        generic_states_t state;
+        generic_status_t status;
+    } sm;
+
+    struct  {
+        bool from_control_loop;
+        bool start_generation;
+    } trigger;
+
+    struct  {
+        generation_sm_type_t gen_type;
+        float32_t scale;
+        float32_t scale_requested;
+    } config;
+
+    struct  {
+        bool enable;
+        bool enable_from_cli;
+        bool disable_from_cli;
+        bool enable_from_comm;
+        bool disable_from_comm;
+        bool disable_from_protection_by_control_error;
+        bool disable_from_protection_by_saturation;
+    } command;
+
+    struct  {
+        bool ready_to_generate;
+        bool generating;
+    } status;
+
+    mode_t controller;
+    //rep_controller_t control;
+    //protection_error_monitor_t protection;
+
+} waveform_generation_t;
+
+
+typedef struct generation_st
+{
+    struct
+    {
+        uint32_t inverter_pwm_steps;
+        uint32_t deadband;
+        uint32_t generation_freq;
+    }config;
+
+    waveform_generation_t voltage;
+    waveform_generation_t current;
+
+    bool sync_flag;
+    uint16_t mep_status;
+    bool zero_trigger;
+
+} generation_t;
+
+
+typedef struct measures_st
+{
+    struct {
+        feedback_t voltage;
+        feedback_t current;
+    } primary;
+    struct {
+        feedback_t voltage;
+        feedback_t current;
+    } secondary;
+} measures_t;
+
+
+
+
 typedef struct application_st
 {
-    abi_t abi;
-    identification_t id;
-    equipment_t equipment;
-    app_sm_t        sm_cpu1;
-    app_sm_t        *sm_cpu2;
+    abi_t               abi;
+    identification_t    id;
+    generation_t        generation;
+    measures_t          measures;
+    app_sm_t            sm_cpu1;
+    app_sm_t            *sm_cpu2;
 } application_t;
 
 
