@@ -187,6 +187,26 @@ static void cpu2_idle   (application_t *app, my_time_t now)
 
 static void cpu2_start  (application_t *app, my_time_t now)
 {
+
+    int boot_error = 0;
+    *(app->sm_cpu2) = (app_sm_t){ .cur = APP_STATE_START };
+
+
+    ipc_simple_init_cpu2();
+
+    cli_init ();
+
+    comm_init();
+    cli_update_display_raw("Comm stack: Ok \n\r");
+
+    buzzer_init(app->id.data.full.my_address);
+    cli_update_display_raw("Buzzer: Ok \n\r");
+
+    if (boot_error)
+        buzzer_enqueue(boot_fail);
+    else
+        buzzer_enqueue(boot_ok);
+
     // Wait until CPU1 running
     if (app->sm_cpu1.cur == APP_STATE_RUNNING) {
         cli_update_display_raw("Gen CPU: Ok\n\r");
@@ -239,25 +259,9 @@ static const state_handler_t CPU2_HANDLERS[] = {
                                                 [APP_STATE_ERROR]   = cpu2_error
 };
 
-void app_init_cpu2(application_t *app) {
-    int boot_error = 0;
+void app_init_cpu2(application_t *app)
+{
     *(app->sm_cpu2) = (app_sm_t){ .cur = APP_STATE_START };
-
-
-    ipc_simple_init_cpu2();
-
-    cli_init ();
-
-    comm_init();
-    cli_update_display_raw("Comm stack: Ok \n\r");
-
-    buzzer_init(app->id.data.full.my_address);
-    cli_update_display_raw("Buzzer: Ok \n\r");
-
-    if (boot_error)
-        buzzer_enqueue(boot_fail);
-    else
-        buzzer_enqueue(boot_ok);
 }
 
 

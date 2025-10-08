@@ -263,7 +263,7 @@ void SPI_init(uint16_t base);
  * @param pin_cs Chip select pin.
  * @return Status of the initialization.
  */
-ada4254_status_t ada4254_init(ada4254_t *this_channel, uint16_t ch, uint16_t spi_base, uint16_t pin_cs);
+//ada4254_status_t ada4254_init(ada4254_t *this_channel, uint16_t ch, uint16_t spi_base, uint16_t pin_cs);
 
 /**
  * @brief Reads data from the ADA4254 device.

@@ -15,8 +15,7 @@ const float32_t ada4254_gain_in_floats[12] = {0.0625, 0.125, 0.25, 0.5, 1.0, 2.0
 const float32_t ada4254_gain_out_floats[3] = {1.0, 1.25, 1.375};
 
 static ada4254_status_t ada4254_update_fgain(ada4254_t * this_channel);
-static inline bool ada4254_spi_ready(const ada4254_t* ch);
-static ada4254_status_t ada4254_write_gain(ada4254_t* ch, uint16_t gain);
+
 
 /**
  * @brief Initializes the SPI module.
@@ -34,8 +33,9 @@ void SPI_init(uint16_t base)
 
 
 
-static inline int time_expired(my_time_t deadline, my_time_t now) {
-    // trata overflow natural de uint32_t
+static inline int time_expired(my_time_t deadline, my_time_t now)
+{
+    //  overflow
     return (int32_t)(now - deadline) >= 0;
 }
 
@@ -69,11 +69,10 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
     switch (ctx->st)
     {
     case INIT_ST_IDLE:
-        return ch->status; // nada fazendo
+        return ch->status;
 
     case INIT_ST_READ_DIE:
         ada4254_read(ch, ADA4254_DIE_REV_ID, 1);
-        // deixa a máquina decidir no próximo passo
         ctx->st = INIT_ST_DECIDE_RESET;
         return ADA4254_STATUS_NOT_INITIALIZED;
 
@@ -87,11 +86,9 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
             ch->status = ADA4254_STATUS_PERMANENT_ERROR;
             break;
         }
-        // Se NÃO for o caso de WAIT_CAL_ERROR, então reseta
         if (ch->status != ADA4254_STATUS_WAIT_CAL_ERROR) {
             ctx->st = INIT_ST_RESET;
         } else {
-            // pula reset e tenta seguir com CRC/verify
             ctx->st = INIT_ST_ENABLE_CRC;
         }
         return ADA4254_STATUS_NOT_INITIALIZED;
@@ -104,7 +101,7 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
 
     case INIT_ST_WAIT_AFTER_RESET:
         if (!time_expired(ctx->deadline_us, now)) {
-            return ADA4254_STATUS_NOT_INITIALIZED; // aguardando sem bloquear
+            return ADA4254_STATUS_NOT_INITIALIZED;
         }
         ctx->st = INIT_ST_ENABLE_CRC;
         return ADA4254_STATUS_NOT_INITIALIZED;
@@ -118,12 +115,10 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
         if (ada4254_test_conn(ch) == ADA4254_STATUS_OK) {
             ctx->st = INIT_ST_VERIFY;
         } else {
-            // falhou teste de conexão → tenta novamente (com limite)
             if (++ctx->tries > 10) {
                 ch->status = ADA4254_STATUS_READ_ERROR;
                 ctx->st = INIT_ST_ERROR;
             } else {
-                // volta para RESET para sequência completa
                 ctx->st = INIT_ST_RESET;
             }
         }
@@ -137,7 +132,6 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
             ch->status = ADA4254_STATUS_PERMANENT_ERROR;
             ctx->st = INIT_ST_ERROR;
         } else {
-            // Falhou verificação: aguarda 40ms e tenta de novo (igual ao seu DELAY_US(40000))
             if (++ctx->tries > 10) {
                 ch->status = ADA4254_STATUS_READ_ERROR;
                 ctx->st = INIT_ST_ERROR;
@@ -153,7 +147,6 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
         if (!time_expired(ctx->deadline_us, now)) {
             return ADA4254_STATUS_NOT_INITIALIZED;
         }
-        // após espera, volte para VERIFY
         ctx->st = INIT_ST_VERIFY;
         return ADA4254_STATUS_NOT_INITIALIZED;
 
@@ -163,7 +156,6 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
         return ADA4254_STATUS_OK;
 
     case INIT_ST_ERROR:
-        // mantém o status que foi setado (READ_ERROR ou PERMANENT_ERROR)
         ctx->st = INIT_ST_IDLE;
         return ch->status;
     }
@@ -172,26 +164,6 @@ ada4254_status_t ada4254_init_poll(ada4254_init_ctx_t *ctx, my_time_t now)
 }
 
 
-
-
-
-// Retorno true/false para status SPI pronto (se você já tiver mecanismo DMA/ISR, substitua).
-static inline bool ada4254_spi_ready(const ada4254_t* ch) {
-    (void)ch;
-    // TODO: se usa DMA/ISR, verifique flags; se síncrono, pode retornar true direto
-    return true;
-}
-
-// Envia comando de ganho (não-bloqueante do ponto de vista do "passo", mas a chamada SPI pode ser síncrona)
-// Se você já tiver uma função sync, pode chamá-la aqui; a não-bloqueância vem da FSM de alto nível.
-static ada4254_status_t ada4254_write_gain(ada4254_t* ch, uint16_t gain)
-{
-    ada4254_status_t ret;
-    // TODO: implemente conforme seu registrador de ganho do ADA4254
-    // ex: return ada4254_write(ch, ADA4254_GAIN_REG, gain);
-    ret = (ADA4254_STATUS_OK);
-    return ret;
-}
 
 void ada4254_set_gain_start(ada4254_gain_ctx_t* gctx,
                             ada4254_t* ch,
@@ -217,8 +189,6 @@ ada4254_status_t ada4254_set_gain_poll(ada4254_gain_ctx_t* gctx, my_time_t now)
         return ch->status;
 
     case ADA4254_GAIN_ST_SEND_CMD: {
-        // Reusa a sua rotina blocante interna apenas como "passo"
-        // (se preferir, expanda em duas escritas como no set_gain existente)
         ada4254_status_t st = ada4254_set_gain(ch, gctx->in_gain, gctx->out_gain);
         if (st == ADA4254_STATUS_OK) {
             gctx->st = ADA4254_GAIN_ST_DONE;
@@ -263,48 +233,48 @@ ada4254_status_t ada4254_set_gain_poll(ada4254_gain_ctx_t* gctx, my_time_t now)
  * @param pin_cs Chip select pin.
  * @return Status of the initialization.
  */
-ada4254_status_t ada4254_init(ada4254_t * this_channel, uint16_t ch, uint16_t spi_base, uint16_t pin_cs)
-{
-    static int tries = 0;
-    //ada4254_status_t status;
-    this_channel->status = ADA4254_STATUS_NOT_INITIALIZED;
-    this_channel->channel = ch;
-    this_channel->spi_base = spi_base;
-    this_channel->pin_cs = pin_cs;
-
-    tries=0;
-
-    ada4254_read(this_channel, ADA4254_DIE_REV_ID, 1);
-
-    while( this_channel->status != ADA4254_STATUS_OK){
-
-        if(this_channel->status != ADA4254_STATUS_WAIT_CAL_ERROR)
-        {
-            ada4254_reset(this_channel);
-            DELAY_US(20000);
-            ada4254_crc_config(this_channel, true);
-        }
-
-        if(ada4254_test_conn(this_channel) == ADA4254_STATUS_OK)
-        {
-            if(ada4254_verify(this_channel) != ADA4254_STATUS_OK)
-                DELAY_US(40000);
-            if (this_channel->status == ADA4254_STATUS_PERMANENT_ERROR)
-            {
-                this_channel->status = ADA4254_STATUS_PERMANENT_ERROR;
-                return ADA4254_STATUS_PERMANENT_ERROR;
-            }
-        }
-        if(tries++>10)
-        {
-            this_channel->status = ADA4254_STATUS_READ_ERROR;
-            return ADA4254_STATUS_READ_ERROR;
-        }
-
-    }
-    this_channel->status = ADA4254_STATUS_OK;
-    return ADA4254_STATUS_OK;
-}
+//ada4254_status_t ada4254_init(ada4254_t * this_channel, uint16_t ch, uint16_t spi_base, uint16_t pin_cs)
+//{
+//    static int tries = 0;
+//    //ada4254_status_t status;
+//    this_channel->status = ADA4254_STATUS_NOT_INITIALIZED;
+//    this_channel->channel = ch;
+//    this_channel->spi_base = spi_base;
+//    this_channel->pin_cs = pin_cs;
+//
+//    tries=0;
+//
+//    ada4254_read(this_channel, ADA4254_DIE_REV_ID, 1);
+//
+//    while( this_channel->status != ADA4254_STATUS_OK){
+//
+//        if(this_channel->status != ADA4254_STATUS_WAIT_CAL_ERROR)
+//        {
+//            ada4254_reset(this_channel);
+//            DELAY_US(20000);
+//            ada4254_crc_config(this_channel, true);
+//        }
+//
+//        if(ada4254_test_conn(this_channel) == ADA4254_STATUS_OK)
+//        {
+//            if(ada4254_verify(this_channel) != ADA4254_STATUS_OK)
+//                DELAY_US(40000);
+//            if (this_channel->status == ADA4254_STATUS_PERMANENT_ERROR)
+//            {
+//                this_channel->status = ADA4254_STATUS_PERMANENT_ERROR;
+//                return ADA4254_STATUS_PERMANENT_ERROR;
+//            }
+//        }
+//        if(tries++>10)
+//        {
+//            this_channel->status = ADA4254_STATUS_READ_ERROR;
+//            return ADA4254_STATUS_READ_ERROR;
+//        }
+//
+//    }
+//    this_channel->status = ADA4254_STATUS_OK;
+//    return ADA4254_STATUS_OK;
+//}
 
 /**
  * @brief Verifies the ADA4254 channel.

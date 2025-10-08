@@ -8,6 +8,7 @@
 #include "ipc_simple.h"
 #include "frequency.h"
 
+#include "amplifier.h"
 
 #define TO_CPU1 0
 #define TO_CPU2 1
@@ -36,6 +37,7 @@ void _cla1_interruption_config(void);
 void _cla1_memory_config(void);
 void _cla1_link_from_sdfm(void);
 void _sdfm_init(void);
+generic_status_t _ampops_init(application_t *app);
 
 __interrupt void access_violation(void);
 __interrupt void xint1_isr(void);
@@ -62,8 +64,14 @@ volatile uint32_t fetchAddress;
 
 
 bool flag_zc = false; //zero crossing mark
-
 int c1,p1,l1;
+
+ int voltage_event = 0;
+ int current_event = 0;
+ int voltage_overpower_counter = 0;
+
+
+
 
 void ipc_on_cmd_from_cpu2(uint8_t cmd, const uint8_t* payload, uint8_t len)
 {
@@ -82,6 +90,30 @@ static void cpu1_idle   (application_t *app, my_time_t now)
 static void cpu1_start  (application_t *app, my_time_t now)
 {
 
+    uint8_t address=0;
+    app->sm_cpu1 = (app_sm_t){ .cur = APP_STATE_START };
+
+    ipc_simple_init_cpu1();
+
+    _app_gpio_init();
+
+
+    if(GPIO_ReadPin(MY_ADDR_PIN0) == 1 )
+        address|=0b001;
+    if(GPIO_ReadPin(MY_ADDR_PIN1) == 1 )
+        address|=0b010;
+
+    app->id.data.full.my_address = address;
+
+    memcpy(app->id.data.full.probewell_part_number, "9015-6200:GEN   ", 16);
+    memcpy(app->id.data.full.serial_number,         "22531515        ", 16);
+    memcpy(app->id.data.full.fabrication_date,      "20260101", 8);
+    memcpy(app->id.data.full.last_verfication_date, "20260101", 8);
+
+
+    Cla1ForceTask8andWait();
+
+    WAITSTEP;
 
     GPIO_writePin(FB_EN_PIN, 1);
     _cla1_link_from_sdfm();
@@ -89,6 +121,8 @@ static void cpu1_start  (application_t *app, my_time_t now)
     _cla1_memory_config();
     _cla1_interruption_config();
     Cla1ForceTask8andWait();
+
+    _ampops_init(app);
 
     _sdfm_init();
 
@@ -133,10 +167,63 @@ static void cpu1_start  (application_t *app, my_time_t now)
     app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
 }
 
+
+bool flag_test=false;
+
+bool flag_amp05 = false;
+bool flag_amp1 = false;
+bool flag_amp2 = false;
+
+
+
 static void cpu1_running(application_t *app, my_time_t now)
 {
+    ipc_service_cpu1(); //try to send msg to cpu2
+    ipc_rx_service_cpu1(); //treat incoming message from cpu2
+    amplifier_system_poll(now);
 
-    // loop
+    if(flag_amp1){
+        flag_amp1=false;
+        amplifier_request_gain(AFE_VV1, IN_GAIN_1, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VI1, IN_GAIN_1, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VV2, IN_GAIN_1, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VI2, IN_GAIN_1, OUT_GAIN_1);
+        amplifier_request_gain(AFE_IV1, IN_GAIN_1, OUT_GAIN_1);
+        amplifier_request_gain(AFE_II1, IN_GAIN_1, OUT_GAIN_1);
+        amplifier_request_gain(AFE_IV2, IN_GAIN_1, OUT_GAIN_1);
+        amplifier_request_gain(AFE_II2, IN_GAIN_1, OUT_GAIN_1);
+    }
+    if(flag_amp05){
+        flag_amp05=false;
+        amplifier_request_gain(AFE_VV1, IN_GAIN_0_5, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VI1, IN_GAIN_0_5, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VV2, IN_GAIN_0_5, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VI2, IN_GAIN_0_5, OUT_GAIN_1);
+        amplifier_request_gain(AFE_IV1, IN_GAIN_0_5, OUT_GAIN_1);
+        amplifier_request_gain(AFE_II1, IN_GAIN_0_5, OUT_GAIN_1);
+        amplifier_request_gain(AFE_IV2, IN_GAIN_0_5, OUT_GAIN_1);
+        amplifier_request_gain(AFE_II2, IN_GAIN_0_5, OUT_GAIN_1);
+    }
+    if(flag_amp2){
+        flag_amp2=false;
+        amplifier_request_gain(AFE_VV1, IN_GAIN_2, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VI1, IN_GAIN_2, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VV2, IN_GAIN_2, OUT_GAIN_1);
+        amplifier_request_gain(AFE_VI2, IN_GAIN_2, OUT_GAIN_1);
+        amplifier_request_gain(AFE_IV1, IN_GAIN_2, OUT_GAIN_1);
+        amplifier_request_gain(AFE_II1, IN_GAIN_2, OUT_GAIN_1);
+        amplifier_request_gain(AFE_IV2, IN_GAIN_2, OUT_GAIN_1);
+        amplifier_request_gain(AFE_II2, IN_GAIN_2, OUT_GAIN_1);
+    }
+
+    if (flag_test)
+    {
+        ipc_buzzer_play(10);
+        int16_t cmd = 0x12;
+        ipc_log_event_from_cpu1(100/*EVT_IPC_TX 100*/, cmd, (now&0xFFFF));
+        flag_test = false;
+    }
+
 }
 
 static void cpu1_error  (application_t *app, my_time_t now)
@@ -160,56 +247,26 @@ static const state_handler_t CPU1_HANDLERS[] =
 
 void app_init_cpu1(application_t *app)
 {
-
-    uint8_t address=0;
     app->sm_cpu1 = (app_sm_t){ .cur = APP_STATE_START };
-
-    ipc_simple_init_cpu1();
-
-    _app_gpio_init();
-
-
-    if(GPIO_ReadPin(MY_ADDR_PIN0) == 1 )
-        address|=0b001;
-    if(GPIO_ReadPin(MY_ADDR_PIN1) == 1 )
-        address|=0b010;
-
-    app->id.data.full.my_address = address;
-
-    memcpy(app->id.data.full.probewell_part_number, "9015-6200:GEN   ", 16);
-    memcpy(app->id.data.full.serial_number,         "22531515        ", 16);
-    memcpy(app->id.data.full.fabrication_date,      "20260101", 8);
-    memcpy(app->id.data.full.last_verfication_date, "20260101", 8);
-
-
-    Cla1ForceTask8andWait();
-    WAITSTEP;
-
-
-
 }
 
 
-bool flag_test=false;
-
 void app_run_cpu1(application_t *app)
 {
-    ipc_service_cpu1(); //try to send msg to cpu2
-    ipc_rx_service_cpu1(); //treat incoming message from cpu2
-
-    if (flag_test)
-    {
-        ipc_buzzer_play(10);
-        int16_t cmd = 0x12;
-        ipc_log_event_from_cpu1(100/*EVT_IPC_TX 100*/, cmd, (uint16_t)(my_time(NULL)&0xFFFF));
-        flag_test = false;
-    }
-
-
     my_time_t now = my_time(NULL);
     CPU1_HANDLERS[app->sm_cpu1.cur](app, now);
 }
 
+
+generic_status_t _ampops_init(application_t *app)
+{
+    generic_status_t status = STATUS_DONE;
+
+    SPI_init(SPIC_BASE);
+    amplifier_system_start(app);
+
+    return status;
+}
 
 
 void _app_gpio_init(void)
@@ -921,10 +978,6 @@ void _sdfm_init(void)
     // by SDFM interrupt to CPU
     SDFM_enableMasterInterrupt(SDFM1_BASE);
 
-    app.measures.primary.voltage.p1 =   &SDFM1_READ_FILTER1_DATA_32BIT;
-    app.measures.primary.voltage.p2 =   &SDFM1_READ_FILTER2_DATA_32BIT;
-    app.measures.primary.current.p1 =   &SDFM1_READ_FILTER3_DATA_32BIT;
-    app.measures.primary.current.p2 =   &SDFM1_READ_FILTER4_DATA_32BIT;
 
 }
 
@@ -979,12 +1032,359 @@ __interrupt void access_violation(void)
 //
 // cla1Isr1 - CLA 1 ISR 1
 //
-interrupt void cla1Isr1()
+#pragma CODE_SECTION(cla1Isr1, ".TI.ramfunc")
+interrupt void cla1Isr1 ()
 {
+    float32_t rkv;
+    float32_t rki;
+    float32_t controller_out;
+    static int loop = 0;
+    static float32_t vv1rms  = 0.0f;
+    static float32_t vi1rms  = 0.0f;
+    static float32_t iv1rms  = 0.0f;
+    static float32_t ii1rms  = 0.0f;
+    static float32_t vv1avg  = 0.0f;
+    static float32_t vi1avg  = 0.0f;
+    static float32_t iv1avg  = 0.0f;
+    static float32_t ii1avg  = 0.0f;
+    static float32_t vv1ppk  = 0.0f;
+    static float32_t vi1ppk  = 0.0f;
+    static float32_t iv1ppk  = 0.0f;
+    static float32_t ii1ppk  = 0.0f;
+    static float32_t vv1npk  = 0.0f;
+    static float32_t vi1npk  = 0.0f;
+    static float32_t iv1npk  = 0.0f;
+    static float32_t ii1npk  = 0.0f;
+    static float32_t vv2rms  = 0.0f;
+    static float32_t vi2rms  = 0.0f;
+    static float32_t iv2rms  = 0.0f;
+    static float32_t ii2rms  = 0.0f;
+    static float32_t vv2avg  = 0.0f;
+    static float32_t vi2avg  = 0.0f;
+    static float32_t iv2avg  = 0.0f;
+    static float32_t ii2avg  = 0.0f;
+    static float32_t vv2ppk  = 0.0f;
+    static float32_t vi2ppk  = 0.0f;
+    static float32_t iv2ppk  = 0.0f;
+    static float32_t ii2ppk  = 0.0f;
+    static float32_t vv2npk  = 0.0f;
+    static float32_t vi2npk  = 0.0f;
+    static float32_t iv2npk  = 0.0f;
+    static float32_t ii2npk  = 0.0f;
+    static float32_t isetpoint  = 0.0f;
+    static float32_t vsetpoint  = 0.0f;
+    static float32_t ictrlerror = 0.0f;
+    static float32_t vctrlerror = 0.0f;
+
+    GPIO_writePin(USR_GPIO3, 1);
+    if(app.generation.sync_flag){
+        app.generation.sync_flag = false;
+        loop = 0;
+        app.generation.current.ref.waveform_index = 0;
+        app.generation.voltage.ref.waveform_index = 0;
+    }
+
+    app.measures.primary.voltage.voltage[loop] = cla_vv1.data;
+    app.measures.primary.voltage.current[loop] = cla_vi1.data;
+    app.measures.primary.current.voltage[loop] = cla_iv1.data;
+    app.measures.primary.current.current[loop] = cla_ii1.data;
+    app.measures.secondary.voltage.voltage[loop] = cla_vv2.data;
+    app.measures.secondary.voltage.current[loop] = cla_vi2.data;
+    app.measures.secondary.current.voltage[loop] = cla_iv2.data;
+    app.measures.secondary.current.current[loop] = cla_ii2.data;
+
+    rki =  reference_routine(&app.generation.current.ref);
+    rki = rki*app.generation.current.config.scale;
+    rkv =  reference_routine(&app.generation.voltage.ref);
+    rkv = rkv*app.generation.voltage.config.scale;
+
+
+    //    if(!app.generation.current.command.enable)
+    //        rki = 0.0f;
+    //    if(!app.generation.voltage.command.enable)
+    //        rkv = 0.0f;
+
+    if(app.generation.current.controller == MODE_REPETITIVE_FROM_CLA)
+    {
+        cla_current_setpoint = rki;
+        //_update_pwm_current(cla_current_controller.out);
+        app.generation.current.trigger.from_control_loop = true;
+    }
+    else if(app.generation.current.controller == MODE_OFF)
+    {
+        cla_current_controller.counter = 0;
+        cla_current_controller.init_flag = false;
+        app.generation.current.controller = MODE_NONE;
+        //_update_pwm_current(0.0f);
+    }
+    else if(app.generation.current.controller == MODE_FEEDFORWARD)
+    {
+        //_update_pwm_current(rki);
+        app.generation.current.trigger.from_control_loop = true;
+    }
+    else if(app.generation.current.controller == MODE_REPETITIVE)
+    {
+        // controller_out = repetitive_routine(&app.generation.current.control, rki, cla_igen_current.data);
+        //_update_pwm_current(controller_out);
+        app.generation.current.trigger.from_control_loop = true;
+    }
+    else if(app.generation.current.controller == MODE_NONE)
+    {
+        //_update_pwm_current(0.0f);
+    }
+
+
+    if(app.generation.voltage.controller == MODE_REPETITIVE_FROM_CLA)
+    {
+        cla_voltage_setpoint = rkv;
+        //_update_pwm_voltage(cla_voltage_controller.out);
+        app.generation.voltage.trigger.from_control_loop = true;
+    }
+    else if(app.generation.voltage.controller == MODE_OFF)
+    {
+        cla_voltage_controller.counter = 0;
+        cla_voltage_controller.init_flag = false;
+        app.generation.voltage.controller = MODE_NONE;
+        //_update_pwm_voltage(0.0f);
+    }
+    else if(app.generation.voltage.controller == MODE_FEEDFORWARD)
+    {
+        //_update_pwm_voltage(rkv);
+        app.generation.voltage.trigger.from_control_loop = true;
+    }
+    else if(app.generation.voltage.controller == MODE_REPETITIVE)
+    {
+        cla_voltage_setpoint = rkv;
+        //controller_out = repetitive_routine(&app.generation.voltage.control, rkv, cla_v1_voltage.data);
+        //_update_pwm_voltage(controller_out);
+        app.generation.voltage.trigger.from_control_loop = true;
+    }
+    else if(app.generation.voltage.controller == MODE_NONE)
+    {
+       // _update_pwm_voltage(0.0f);
+    }
+
+
+    vv1rms += app.measures.primary.voltage.voltage[loop] * app.measures.primary.voltage.voltage[loop];
+    vi1rms += app.measures.primary.voltage.current[loop] * app.measures.primary.voltage.current[loop];
+    iv1rms += app.measures.primary.current.voltage[loop] * app.measures.primary.current.voltage[loop];
+    ii1rms += app.measures.primary.current.current[loop] * app.measures.primary.current.current[loop];
+    vv2rms += app.measures.secondary.voltage.voltage[loop] * app.measures.secondary.voltage.voltage[loop];
+    vi2rms += app.measures.secondary.voltage.current[loop] * app.measures.secondary.voltage.current[loop];
+    iv2rms += app.measures.secondary.current.voltage[loop] * app.measures.secondary.current.voltage[loop];
+    ii2rms += app.measures.secondary.current.current[loop] * app.measures.secondary.current.current[loop];
+
+
+    ictrlerror += cla_current_controller.v_erro[loop] * cla_current_controller.v_erro[loop];
+    vctrlerror += cla_voltage_controller.v_erro[loop] * cla_voltage_controller.v_erro[loop];
+    isetpoint += rki*rki;
+    vsetpoint += rkv*rkv;
+
+    vv1avg += app.measures.primary.voltage.voltage[loop];
+    vi1avg += app.measures.primary.voltage.current[loop];
+    iv1avg += app.measures.primary.current.voltage[loop];
+    ii1avg += app.measures.primary.current.current[loop];
+    vv2avg += app.measures.secondary.voltage.voltage[loop];
+    vi2avg += app.measures.secondary.voltage.current[loop];
+    iv2avg += app.measures.secondary.current.voltage[loop];
+    ii2avg += app.measures.secondary.current.current[loop];
+
+    app.measures.primary.voltage.power_sum += (app.measures.primary.voltage.voltage[loop] * app.measures.primary.voltage.current[loop]) / (1000.0f);
+    app.measures.primary.current.power_sum += (app.measures.primary.current.voltage[loop] * app.measures.primary.current.current[loop]) / (1000.0f);
+    app.measures.secondary.voltage.power_sum += (app.measures.secondary.voltage.voltage[loop] * app.measures.secondary.voltage.current[loop]) / (1000.0f);
+    app.measures.secondary.current.power_sum += (app.measures.secondary.current.voltage[loop] * app.measures.secondary.current.current[loop]) / (1000.0f);
+
+    if(vv1ppk < app.measures.primary.voltage.voltage[loop])
+        vv1ppk = app.measures.primary.voltage.voltage[loop];
+    if(vi1ppk < app.measures.primary.voltage.current[loop])
+        vi1ppk = app.measures.primary.voltage.current[loop];
+    if(iv1ppk < app.measures.primary.current.voltage[loop])
+        iv1ppk = app.measures.primary.current.voltage[loop];
+    if(ii1ppk < app.measures.primary.current.current[loop])
+        ii1ppk = app.measures.primary.current.current[loop];
+    if(vv2ppk < app.measures.secondary.voltage.voltage[loop])
+        vv2ppk = app.measures.secondary.voltage.voltage[loop];
+    if(vi2ppk < app.measures.secondary.voltage.current[loop])
+        vi2ppk = app.measures.secondary.voltage.current[loop];
+    if(iv2ppk < app.measures.secondary.current.voltage[loop])
+        iv2ppk = app.measures.secondary.current.voltage[loop];
+    if(ii2ppk < app.measures.secondary.current.current[loop])
+        ii2ppk = app.measures.secondary.current.current[loop];
+
+    if(vv1npk > app.measures.primary.voltage.voltage[loop])
+        vv1npk = app.measures.primary.voltage.voltage[loop];
+    if(vi1npk > app.measures.primary.voltage.current[loop])
+        vi1npk = app.measures.primary.voltage.current[loop];
+    if(iv1npk > app.measures.primary.current.voltage[loop])
+        iv1npk = app.measures.primary.current.voltage[loop];
+    if(ii1npk > app.measures.primary.current.current[loop])
+        ii1npk = app.measures.primary.current.current[loop];
+    if(vv2npk > app.measures.secondary.voltage.voltage[loop])
+        vv2npk = app.measures.secondary.voltage.voltage[loop];
+    if(vi2npk > app.measures.secondary.voltage.current[loop])
+        vi2npk = app.measures.secondary.voltage.current[loop];
+    if(iv2npk > app.measures.secondary.current.voltage[loop])
+        iv2npk = app.measures.secondary.current.voltage[loop];
+    if(ii2npk > app.measures.secondary.current.current[loop])
+        ii2npk = app.measures.secondary.current.current[loop];
+
+    if( ++loop >= 1000 )
+    {
+        app.measures.primary.voltage.setpoint_rms = sqrtf(vsetpoint/1000.0f);
+        app.measures.primary.current.setpoint_rms = sqrtf(isetpoint/1000.0f);
+        app.measures.secondary.voltage.setpoint_rms = sqrtf(vsetpoint/1000.0f);
+        app.measures.secondary.current.setpoint_rms = sqrtf(isetpoint/1000.0f);
+
+        app.measures.primary.voltage.voltage_rms = sqrtf(vv1rms/1000.0f);
+        app.measures.primary.voltage.current_rms = sqrtf(vi1rms/1000.0f);
+        app.measures.primary.current.voltage_rms = sqrtf(iv1rms/1000.0f);
+        app.measures.primary.current.current_rms = sqrtf(ii1rms/1000.0f);
+
+        app.measures.secondary.voltage.voltage_rms = sqrtf(vv2rms/1000.0f);
+        app.measures.secondary.voltage.current_rms = sqrtf(vi2rms/1000.0f);
+        app.measures.secondary.current.voltage_rms = sqrtf(iv2rms/1000.0f);
+        app.measures.secondary.current.current_rms = sqrtf(ii2rms/1000.0f);
+
+        app.measures.primary.current.ctrl_erro_rms = sqrtf(ictrlerror/1000.0f);
+        app.measures.primary.voltage.ctrl_erro_rms = sqrtf(vctrlerror/1000.0f);
+        app.measures.secondary.current.ctrl_erro_rms = sqrtf(ictrlerror/1000.0f);
+        app.measures.secondary.voltage.ctrl_erro_rms = sqrtf(vctrlerror/1000.0f);
+
+        app.measures.primary.voltage.voltage_avg = vv1avg/1000.0f;
+        app.measures.primary.voltage.current_avg = vi1avg/1000.0f;
+        app.measures.primary.current.voltage_avg = iv1avg/1000.0f;
+        app.measures.primary.current.current_avg = ii1avg/1000.0f;
+
+        app.measures.secondary.voltage.voltage_avg = vv2avg/1000.0f;
+        app.measures.secondary.voltage.current_avg = vi2avg/1000.0f;
+        app.measures.secondary.current.voltage_avg = iv2avg/1000.0f;
+        app.measures.secondary.current.current_avg = ii2avg/1000.0f;
+
+        app.measures.primary.voltage.voltage_ppeak = vv1ppk;
+        app.measures.primary.voltage.current_ppeak = vi1ppk;
+        app.measures.primary.current.voltage_ppeak = iv1ppk;
+        app.measures.primary.current.current_ppeak = ii1ppk;
+
+        app.measures.secondary.voltage.voltage_ppeak = vv2ppk;
+        app.measures.secondary.voltage.current_ppeak = vi2ppk;
+        app.measures.secondary.current.voltage_ppeak = iv2ppk;
+        app.measures.secondary.current.current_ppeak = ii2ppk;
+
+        app.measures.primary.voltage.voltage_npeak = vv1npk;
+        app.measures.primary.voltage.current_npeak = vi1npk;
+        app.measures.primary.current.voltage_npeak = iv1npk;
+        app.measures.primary.current.current_npeak = ii1npk;
+
+        app.measures.secondary.voltage.voltage_npeak = vv2npk;
+        app.measures.secondary.voltage.current_npeak = vi2npk;
+        app.measures.secondary.current.voltage_npeak = iv2npk;
+        app.measures.secondary.current.current_npeak = ii2npk;
+
+        app.measures.primary.voltage.power = app.measures.primary.voltage.power_sum;
+        app.measures.primary.current.power = app.measures.primary.current.power_sum;
+        app.measures.secondary.voltage.power = app.measures.secondary.voltage.power_sum;
+        app.measures.secondary.current.power = app.measures.secondary.current.power_sum;
+
+        app.measures.primary.voltage.power_sum = 0.0f;
+        app.measures.primary.current.power_sum = 0.0f;
+        app.measures.secondary.voltage.power_sum = 0.0f;
+        app.measures.secondary.current.power_sum = 0.0f;
+
+
+        app.measures.primary.voltage.impedance = app.measures.primary.voltage.voltage_rms / app.measures.primary.voltage.current_rms;
+        app.measures.primary.current.impedance = app.measures.primary.current.voltage_rms / app.measures.primary.current.current_rms;
+
+        app.measures.secondary.voltage.impedance = app.measures.secondary.voltage.voltage_rms / app.measures.secondary.voltage.current_rms;
+        app.measures.secondary.current.impedance = app.measures.secondary.current.voltage_rms / app.measures.secondary.current.current_rms;
+
+
+
+        if(app.measures.primary.voltage.power > 10E-3 ) //10mWW
+        {
+            if(app.measures.secondary.voltage.impedance < 20.0)
+            {
+                voltage_event = 1;
+            }
+
+            if( app.measures.primary.voltage.power  > 10.0 )
+                if( app.measures.primary.voltage.power  > 10 * app.measures.secondary.voltage.power)
+                {
+                    if(++voltage_overpower_counter>20)
+                        voltage_event = 2;
+                }
+
+        }
+
+        if(app.measures.primary.current.power > 1E-4 ) //0.1mW
+        {
+            if(app.measures.secondary.current.impedance > 10.0)
+            {
+                current_event = 1;
+            }
+            if(app.measures.primary.current.impedance > 500.0)
+            {
+                current_event = 2;
+            }
+            if( app.measures.primary.current.power  > 10* app.measures.secondary.current.power)
+            {
+                current_event = 3;
+            }
+        }
+
+
+
+        vv1avg = 0.0f;
+        vi1avg = 0.0f;
+        iv1avg = 0.0f;
+        ii1avg = 0.0f;
+        vv2avg = 0.0f;
+        vi2avg = 0.0f;
+        iv2avg = 0.0f;
+        ii2avg = 0.0f;
+
+        vv1rms = 0.0f;
+        vi1rms = 0.0f;
+        iv1rms = 0.0f;
+        ii1rms = 0.0f;
+        vv2rms = 0.0f;
+        vi2rms = 0.0f;
+        iv2rms = 0.0f;
+        ii2rms = 0.0f;
+
+        vv1ppk = 0.0f;
+        vi1ppk = 0.0f;
+        iv1ppk = 0.0f;
+        ii1ppk = 0.0f;
+        vv2ppk = 0.0f;
+        vi2ppk = 0.0f;
+        iv2ppk = 0.0f;
+        ii2ppk = 0.0f;
+
+        vv1npk = 0.0f;
+        vi1npk = 0.0f;
+        iv1npk = 0.0f;
+        ii1npk = 0.0f;
+        vv2npk = 0.0f;
+        vi2npk = 0.0f;
+        iv2npk = 0.0f;
+        ii2npk = 0.0f;
+
+        isetpoint = 0.0;
+        vsetpoint = 0.0;
+        ictrlerror = 0.0f;
+        vctrlerror = 0.0f;
+
+        loop = 0;
+
+        app.generation.zero_trigger = true;
+
+    }
+
+    GPIO_writePin(USR_GPIO3, 0);
+    // Acknowledge the end-of-task interrupt for task 1
 
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP11);
 }
-
 //
 // cla1Isr2 - CLA 1 ISR 2
 //

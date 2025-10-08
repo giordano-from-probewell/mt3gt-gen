@@ -92,48 +92,46 @@ __interrupt void Cla1Task1 ( void )
     cla_vi2.data = (((float)cla_vi2.raw) * cla_vi2.gain);
     cla_vv2.data = (((float)cla_vv2.raw) * cla_vv2.gain);
 
-    cla_ii1.offset_acc += cla_ii1.data;
-    cla_iv1.offset_acc += cla_iv1.data;
-    cla_vi1.offset_acc += cla_vi1.data;
-    cla_vv1.offset_acc += cla_vv2.data;
-    cla_ii2.offset_acc += cla_ii2.data;
-    cla_iv2.offset_acc += cla_iv2.data;
-    cla_vi2.offset_acc += cla_vi2.data;
-    cla_vv2.offset_acc += cla_vv2.data;
+//    cla_ii1.offset_acc += cla_ii1.data;
+//    cla_iv1.offset_acc += cla_iv1.data;
+//    cla_vi1.offset_acc += cla_vi1.data;
+//    cla_vv1.offset_acc += cla_vv2.data;
+//    cla_ii2.offset_acc += cla_ii2.data;
+//    cla_iv2.offset_acc += cla_iv2.data;
+//    cla_vi2.offset_acc += cla_vi2.data;
+//    cla_vv2.offset_acc += cla_vv2.data;
 
-    cla_ii1.data -= cla_ii1.offset;
-    cla_iv1.data -= cla_iv1.offset;
-    cla_vi1.data -= cla_vi1.offset;
-    cla_vv1.data -= cla_vi2.offset;
-    cla_ii2.data -= cla_ii2.offset;
-    cla_iv2.data -= cla_iv2.offset;
-    cla_vi2.data -= cla_vi2.offset;
-    cla_vv2.data -= cla_vv2.offset;
-
-
-    if(++cla_loop>=1000)
-    {
-        cla_loop = 0;
-        cla_ii1.offset = cla_ii1.offset_acc/1000.0;
-        cla_iv1.offset = cla_iv1.offset_acc/1000.0;
-        cla_vi1.offset = cla_vi1.offset_acc/1000.0;
-        cla_vv1.offset = cla_vi2.offset_acc/1000.0;
-        cla_ii2.offset = cla_ii2.offset_acc/1000.0;
-        cla_iv2.offset = cla_iv2.offset_acc/1000.0;
-        cla_vi2.offset = cla_vi2.offset_acc/1000.0;
-        cla_vv2.offset = cla_vv2.offset_acc/1000.0;
-
-        cla_ii1.offset_acc = 0.0f;
-        cla_iv1.offset_acc = 0.0f;
-        cla_vi1.offset_acc = 0.0f;
-        cla_vv1.offset_acc = 0.0f;
-        cla_ii2.offset_acc = 0.0f;
-        cla_iv2.offset_acc = 0.0f;
-        cla_vi2.offset_acc = 0.0f;
-        cla_vv2.offset_acc = 0.0f;
-    }
+//    cla_ii1.data -= cla_ii1.offset;
+//    cla_iv1.data -= cla_iv1.offset;
+//    cla_vi1.data -= cla_vi1.offset;
+//    cla_vv1.data -= cla_vi2.offset;
+//    cla_ii2.data -= cla_ii2.offset;
+//    cla_iv2.data -= cla_iv2.offset;
+//    cla_vi2.data -= cla_vi2.offset;
+//    cla_vv2.data -= cla_vv2.offset;
 
 
+//    if(++cla_loop>=1000)
+//    {
+//        cla_loop = 0;
+//        cla_ii1.offset = cla_ii1.offset_acc/1000.0;
+//        cla_iv1.offset = cla_iv1.offset_acc/1000.0;
+//        cla_vi1.offset = cla_vi1.offset_acc/1000.0;
+//        cla_vv1.offset = cla_vi2.offset_acc/1000.0;
+//        cla_ii2.offset = cla_ii2.offset_acc/1000.0;
+//        cla_iv2.offset = cla_iv2.offset_acc/1000.0;
+//        cla_vi2.offset = cla_vi2.offset_acc/1000.0;
+//        cla_vv2.offset = cla_vv2.offset_acc/1000.0;
+//
+//        cla_ii1.offset_acc = 0.0f;
+//        cla_iv1.offset_acc = 0.0f;
+//        cla_vi1.offset_acc = 0.0f;
+//        cla_vv1.offset_acc = 0.0f;
+//        cla_ii2.offset_acc = 0.0f;
+//        cla_iv2.offset_acc = 0.0f;
+//        cla_vi2.offset_acc = 0.0f;
+//        cla_vv2.offset_acc = 0.0f;
+//    }
 
 
     if(cla_voltage_controller.state == STATE_CLA_CONTROLLER__ON)
@@ -270,7 +268,7 @@ __interrupt void Cla1Task8 ( void )
     cla_vi2.offset_acc = 0.0f;
 
 
-#define VGEN_GENERIC
+#define VGENCAL
 
 
 #ifdef VGEN1

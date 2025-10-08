@@ -79,11 +79,19 @@ static void _handle_data(cli_menu_t *menu, const my_time_t now, int16_t rcv, gen
         print_line(menu->tx->buffer, &n, "\t\t %3.4f", 0.0f);     // 1
         print_line(menu->tx->buffer, &n, "\t\t %3.4f", 0.0f);     // 2
         print_line(menu->tx->buffer, &n, "");                     // 3 (em branco, se precisa)
-        print_line(menu->tx->buffer, &n, "\t\t %s  %6.4fV %6.4fA %6.4fW %6.4f", "ON", 0.f,0.f,0.f,0.f); // 4
-        print_line(menu->tx->buffer, &n, "\t\t %s  %6.4fV %6.4fA %6.4fW %6.4f", "ON", 0.f,0.f,0.f,0.f); // 5
+        print_line(menu->tx->buffer, &n, "\t\t %s  %6.4fV %6.4fA %6.4fW %6.4f", "ON",
+                   (app.measures.primary.voltage.voltage_rms),(app.measures.primary.voltage.current_rms),
+                   (app.measures.primary.voltage.power),(app.measures.primary.voltage.impedance));
+        print_line(menu->tx->buffer, &n, "\t\t %s  %6.4fV %6.4fA %6.4fW %6.4f", "ON",
+                   (app.measures.primary.current.voltage_rms),(app.measures.primary.current.current_rms),
+                   (app.measures.primary.current.power),(app.measures.primary.current.impedance));
         print_line(menu->tx->buffer, &n, "");                     // 6
-        print_line(menu->tx->buffer, &n, "\t\t  %6.4fV %6.4fA %6.4fW %6.4f", 0.f,0.f,0.f,0.f); // 7
-        print_line(menu->tx->buffer, &n, "\t\t  %6.4fV %6.4fA %6.4fW %6.4f", 0.f,0.f,0.f,0.f); // 8
+        print_line(menu->tx->buffer, &n, "\t\t  %6.4fV %6.4fA %6.4fW %6.4f",
+                   (app.measures.secondary.voltage.voltage_rms),(app.measures.secondary.voltage.current_rms),
+                   (app.measures.secondary.voltage.power),(app.measures.secondary.voltage.impedance));
+        print_line(menu->tx->buffer, &n, "\t\t  %6.4fV %6.4fA %6.4fW %6.4f",
+                   (app.measures.secondary.current.voltage_rms),(app.measures.secondary.current.current_rms),
+                   (app.measures.secondary.current.power),(app.measures.secondary.current.impedance));
         print_line(menu->tx->buffer, &n, "");                     // 9
         print_line(menu->tx->buffer, &n, "  v=%x %x i=%x %x", 0,0,0,0); // 10
         print_line(menu->tx->buffer, &n, "");                     // 11

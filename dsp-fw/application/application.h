@@ -192,25 +192,25 @@
 #define SDFM_C_II1_PIN                  125
 #define SDFM_C_II1_PIN_CONFIG           GPIO_125_SD1_C2
 
-#define SDFM_D_IV2_PIN                  126
-#define SDFM_D_IV2_PIN_CONFIG           GPIO_126_SD1_D3
-#define SDFM_C_IV2_PIN                  127
-#define SDFM_C_IV2_PIN_CONFIG           GPIO_127_SD1_C3
+#define SDFM_D_IV2_PIN                  130
+#define SDFM_D_IV2_PIN_CONFIG           GPIO_130_SD2_D1
+#define SDFM_C_IV2_PIN                  131
+#define SDFM_C_IV2_PIN_CONFIG           GPIO_131_SD2_C1
 
-#define SDFM_D_II2_PIN                  128
-#define SDFM_D_II2_PIN_CONFIG           GPIO_128_SD1_D4
-#define SDFM_C_II2_PIN                  129
-#define SDFM_C_II2_PIN_CONFIG           GPIO_129_SD1_C4
+#define SDFM_D_II2_PIN                  132
+#define SDFM_D_II2_PIN_CONFIG           GPIO_132_SD2_D2
+#define SDFM_C_II2_PIN                  133
+#define SDFM_C_II2_PIN_CONFIG           GPIO_133_SD2_C2
 
-#define SDFM_D_VV1_PIN                  130
-#define SDFM_D_VV1_PIN_CONFIG           GPIO_130_SD2_D1
-#define SDFM_C_VV1_PIN                  131
-#define SDFM_C_VV1_PIN_CONFIG           GPIO_131_SD2_C1
+#define SDFM_D_VV1_PIN                  126
+#define SDFM_D_VV1_PIN_CONFIG           GPIO_126_SD1_D3
+#define SDFM_C_VV1_PIN                  127
+#define SDFM_C_VV1_PIN_CONFIG           GPIO_127_SD1_C3
 
-#define SDFM_D_VI1_PIN                  132
-#define SDFM_D_VI1_PIN_CONFIG           GPIO_132_SD2_D2
-#define SDFM_C_VI1_PIN                  133
-#define SDFM_C_VI1_PIN_CONFIG           GPIO_133_SD2_C2
+#define SDFM_D_VI1_PIN                  128
+#define SDFM_D_VI1_PIN_CONFIG           GPIO_128_SD1_D4
+#define SDFM_C_VI1_PIN                  129
+#define SDFM_C_VI1_PIN_CONFIG           GPIO_129_SD1_C4
 
 #define SDFM_D_VV2_PIN                  134
 #define SDFM_D_VV2_PIN_CONFIG           GPIO_134_SD2_D3
@@ -221,6 +221,7 @@
 #define SDFM_D_VI2_PIN_CONFIG           GPIO_136_SD2_D4
 #define SDFM_C_VI2_PIN                  137
 #define SDFM_C_VI2_PIN_CONFIG           GPIO_137_SD2_C4
+
 
 //#define SDFM_CLK_MULT_PIN             10
 //#define SDFM_CLK_MULT_PIN_CONFIG      GPIO_10_GPIO10
@@ -337,9 +338,8 @@ typedef struct {
 
 typedef struct feedback_st
 {
-        volatile int32_t* p1;
-        volatile int32_t* p2;
-        ada4254_t voltage_gain, current_gain;
+
+        ada4254_t *voltage_gain, *current_gain;
 
         float32_t voltage_rms;
         float32_t voltage_avg;
@@ -445,9 +445,15 @@ typedef struct generation_st
 
 } generation_t;
 
+typedef struct analog_input_st
+{
+    ada4254_t ada_channel;
+} analog_input_t;
+
 
 typedef struct measures_st
 {
+    analog_input_t analog_input[8];
     struct {
         feedback_t voltage;
         feedback_t current;
@@ -457,7 +463,6 @@ typedef struct measures_st
         feedback_t current;
     } secondary;
 } measures_t;
-
 
 
 
