@@ -9,6 +9,7 @@
 #include "frequency.h"
 
 #include "amplifier.h"
+#include "generation_sm.h"
 
 #define TO_CPU1 0
 #define TO_CPU2 1
@@ -145,24 +146,81 @@ static void cpu1_start  (application_t *app, my_time_t now)
 
 //    gen_sm_turning_on();
 //
-//    setupInverter(
-//            INV_PWM1_VOLTAGE,
-//            INV_PWM2_VOLTAGE,
-//            INV_PWM2_CURRENT,
-//            INV_PWM1_CURRENT,
-//            INV_PWM_PERIOD,
-//            INV_DEADBAND_PWM_COUNT
-//    );
-//
-//
-//    if(init_feedback(SDFM_CLK_HRPWM_BASE,app.generation.config.generation_freq) != STATUS_DONE)
-//    {
-//        update_display_raw(" Amplifiers error");
-//        boot_error = true;
-//    }
-//    else{
-//        update_display_raw(" Amplifiers ok");
-//    }
+    setupInverter(
+            INV_PWM1_VOLTAGE,
+            INV_PWM2_VOLTAGE,
+            INV_PWM2_CURRENT,
+            INV_PWM1_CURRENT,
+            INV_PWM_PERIOD,
+            INV_DEADBAND_PWM_COUNT
+    );
+
+
+
+    reference_init(&app->generation.voltage.ref);
+    reference_init(&app->generation.current.ref);
+
+    //PWM max = 90% PWM min = 10%
+    init_protection(&app->generation.voltage.protection,
+                    80, 200, 50.0, 10.0,
+                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+                    ((app->generation.config.inverter_pwm_steps)*10)/100
+    );
+
+    init_protection(&app->generation.current.protection,
+                    60, 600, 90.0, 0.8,
+                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+                    ((app->generation.config.inverter_pwm_steps)*10)/100
+    );
+
+    app->generation.voltage.controller = MODE_NONE;
+    app->generation.current.controller = MODE_NONE;
+
+    app->generation.voltage.config.scale_requested = 0.0;
+    app->generation.current.config.scale_requested= 0.0;
+
+
+    app->generation.current.controller = MODE_FEEDFORWARD;
+    app->generation.voltage.controller = MODE_FEEDFORWARD;
+
+    app->generation.current.command.disable_from_cli = false;
+    app->generation.current.command.enable_from_cli = false;
+    app->generation.current.config.gen_type = GENERATING_CURRENT;
+    app->generation.current.command.enable = false;
+    app->generation.current.status.ready_to_generate = false;
+    app->generation.current.status.generating = false;
+    app->generation.current.trigger.from_control_loop = false;
+    app->generation.current.sm.state = STATE_INIT;
+
+    app->generation.voltage.command.disable_from_cli = false;
+    app->generation.voltage.command.enable_from_cli = false;
+    app->generation.voltage.config.gen_type = GENERATING_VOLTAGE;
+    app->generation.voltage.command.enable = false;
+    app->generation.voltage.status.ready_to_generate = false;
+    app->generation.voltage.status.generating = false;
+    app->generation.voltage.trigger.from_control_loop = false;
+    app->generation.voltage.sm.state = STATE_INIT;
+
+    app->generation.current.command.disable_from_cli = false;
+    app->generation.current.command.disable_from_comm = false;
+    app->generation.current.command.disable_from_protection_by_control_error = false;
+    app->generation.current.command.disable_from_protection_by_saturation = false;
+    app->generation.current.command.enable = false;
+    app->generation.current.command.enable_from_cli = false;
+    app->generation.current.command.disable_from_cli = false;
+    app->generation.current.command.enable_from_comm = false;
+
+    app->generation.voltage.command.disable_from_cli = false;
+    app->generation.voltage.command.disable_from_comm = false;
+    app->generation.voltage.command.disable_from_protection_by_control_error = false;
+    app->generation.voltage.command.disable_from_protection_by_saturation = false;
+    app->generation.voltage.command.enable = false;
+    app->generation.voltage.command.enable_from_cli = false;
+    app->generation.voltage.command.disable_from_cli = false;
+    app->generation.voltage.command.enable_from_comm = false;
+
+    app->generation.sync_flag = false;
+
 
     app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
 }
@@ -1107,7 +1165,7 @@ interrupt void cla1Isr1 ()
     if(app.generation.current.controller == MODE_REPETITIVE_FROM_CLA)
     {
         cla_current_setpoint = rki;
-        //_update_pwm_current(cla_current_controller.out);
+        _update_pwm_current(cla_current_controller.out);
         app.generation.current.trigger.from_control_loop = true;
     }
     else if(app.generation.current.controller == MODE_OFF)
@@ -1115,29 +1173,29 @@ interrupt void cla1Isr1 ()
         cla_current_controller.counter = 0;
         cla_current_controller.init_flag = false;
         app.generation.current.controller = MODE_NONE;
-        //_update_pwm_current(0.0f);
+        _update_pwm_current(0.0f);
     }
     else if(app.generation.current.controller == MODE_FEEDFORWARD)
     {
-        //_update_pwm_current(rki);
+        _update_pwm_current(rki);
         app.generation.current.trigger.from_control_loop = true;
     }
     else if(app.generation.current.controller == MODE_REPETITIVE)
     {
         // controller_out = repetitive_routine(&app.generation.current.control, rki, cla_igen_current.data);
-        //_update_pwm_current(controller_out);
+        _update_pwm_current(controller_out);
         app.generation.current.trigger.from_control_loop = true;
     }
     else if(app.generation.current.controller == MODE_NONE)
     {
-        //_update_pwm_current(0.0f);
+        _update_pwm_current(0.0f);
     }
 
 
     if(app.generation.voltage.controller == MODE_REPETITIVE_FROM_CLA)
     {
         cla_voltage_setpoint = rkv;
-        //_update_pwm_voltage(cla_voltage_controller.out);
+        _update_pwm_voltage(cla_voltage_controller.out);
         app.generation.voltage.trigger.from_control_loop = true;
     }
     else if(app.generation.voltage.controller == MODE_OFF)
@@ -1145,23 +1203,23 @@ interrupt void cla1Isr1 ()
         cla_voltage_controller.counter = 0;
         cla_voltage_controller.init_flag = false;
         app.generation.voltage.controller = MODE_NONE;
-        //_update_pwm_voltage(0.0f);
+        _update_pwm_voltage(0.0f);
     }
     else if(app.generation.voltage.controller == MODE_FEEDFORWARD)
     {
-        //_update_pwm_voltage(rkv);
+        _update_pwm_voltage(rkv);
         app.generation.voltage.trigger.from_control_loop = true;
     }
     else if(app.generation.voltage.controller == MODE_REPETITIVE)
     {
         cla_voltage_setpoint = rkv;
         //controller_out = repetitive_routine(&app.generation.voltage.control, rkv, cla_v1_voltage.data);
-        //_update_pwm_voltage(controller_out);
+        _update_pwm_voltage(controller_out);
         app.generation.voltage.trigger.from_control_loop = true;
     }
     else if(app.generation.voltage.controller == MODE_NONE)
     {
-       // _update_pwm_voltage(0.0f);
+        _update_pwm_voltage(0.0f);
     }
 
 

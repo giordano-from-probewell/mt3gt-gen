@@ -77,11 +77,11 @@ PAGE 1 : /* Data Memory */
    //RAMGS2        : origin = 0x00E000, length = 0x001000
    //RAMGS3        : origin = 0x00F000, length = 0x001000
    //RAMGS4        : origin = 0x010000, length = 0x001000
-   RAMGS_DATA_CPU2 : origin = 0x011000, length = 0x001000
+   RAMGS_DATA_CPU2 : origin = 0x011000, length = 0x003000
    //RAMGS5        : origin = 0x011000, length = 0x001000
-   RAMGS_CPU2      : origin = 0x012000, length = 0x005FF8
    //RAMGS6        : origin = 0x012000, length = 0x001000
    //RAMGS7        : origin = 0x013000, length = 0x001000
+   RAMGS_CPU2      : origin = 0x014000, length = 0x003FF8
    //RAMGS8        : origin = 0x014000, length = 0x001000
    //RAMGS9        : origin = 0x015000, length = 0x001000
    //RAMGS10       : origin = 0x016000, length = 0x001000
@@ -130,6 +130,7 @@ SECTIONS
  	app_data_cpu1		:> RAMGS_DATA_CPU1, 					PAGE = 1
  	app_data_cpu2		:> RAMGS_DATA_CPU2, 					PAGE = 1
  	.data               :> RAMGS_CPU2, 							PAGE = 1
+ 	ref_data            :> RAMGS_DATA_CPU2, 					PAGE = 1
 
        /* Far memory sections */
     .farbss             :> SDRAM_CPU2,                          PAGE = 1, ALIGN(4)  /* Far memory variables */

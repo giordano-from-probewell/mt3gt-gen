@@ -20,7 +20,8 @@
 #include "buzzer.h"
 
 #include "reference_generation.h"
-
+#include "generation_sm.h"
+#include "protection.h"
 
 
 /* Generic All Devices Defines */
@@ -96,8 +97,10 @@
 
 
 
-
 /* Device Related Defines */
+#define CPU_SYS_CLOCK (200*1000000)
+#define PWMSYSCLOCK_FREQ (100*1000000)
+#define ECAPSYSCLOCK_FREQ   (200*1000000)
 
 
 /* Power Stage Related Values*/
@@ -111,11 +114,11 @@
 #define PWM_CH              9   // # of PWM channels + 1 -*ePWM[0] is defined as dummy value not used
 
 
-#define VOLTAGE_MAX 500.0f*1.4142f  //Vrms
-#define CURRENT_MAX 35.0f*1.4142f   //Irms
-#define VOLTAGE_MAX 500.0f*1.4142f  //Vrms
-#define FREQUENCY_MAX 70.0f
-#define FREQUENCY_MIN 40.0f
+#define VOLTAGE_MAX         500.0f*1.4142f  //Vrms
+#define CURRENT_MAX         35.0f*1.4142f   //Irms
+#define VOLTAGE_MAX         500.0f*1.4142f  //Vrms
+#define FREQUENCY_MAX       70.0f
+#define FREQUENCY_MIN       40.0f
 
 //USER AND DEBUG PINS
 #define USR_GPIO0                       43
@@ -128,29 +131,29 @@
 #define USR_GPIO3_PIN_CONFIG            GPIO_144_GPIO144
 
 //BRIDGE
-#define INV_PWM1_VOLTAGE                   EPWM2_BASE
-#define INV_PWM1_VOLTAGE_H_PIN             2
-#define INV_PWM1_VOLTAGE_H_PIN_CONFIG      GPIO_2_EPWM2A
-#define INV_PWM1_VOLTAGE_L_PIN             3
-#define INV_PWM1_VOLTAGE_L_PIN_CONFIG      GPIO_3_EPWM2B
+#define INV_PWM1_VOLTAGE                EPWM2_BASE
+#define INV_PWM1_VOLTAGE_H_PIN          2
+#define INV_PWM1_VOLTAGE_H_PIN_CONFIG   GPIO_2_EPWM2A
+#define INV_PWM1_VOLTAGE_L_PIN          3
+#define INV_PWM1_VOLTAGE_L_PIN_CONFIG   GPIO_3_EPWM2B
 
-#define INV_PWM2_VOLTAGE                   EPWM1_BASE
-#define INV_PWM2_VOLTAGE_H_PIN             0
-#define INV_PWM2_VOLTAGE_H_PIN_CONFIG      GPIO_0_EPWM1A
-#define INV_PWM2_VOLTAGE_L_PIN             1
-#define INV_PWM2_VOLTAGE_L_PIN_CONFIG      GPIO_1_EPWM1B
+#define INV_PWM2_VOLTAGE                EPWM1_BASE
+#define INV_PWM2_VOLTAGE_H_PIN          0
+#define INV_PWM2_VOLTAGE_H_PIN_CONFIG   GPIO_0_EPWM1A
+#define INV_PWM2_VOLTAGE_L_PIN          1
+#define INV_PWM2_VOLTAGE_L_PIN_CONFIG   GPIO_1_EPWM1B
 
-#define INV_PWM1_CURRENT                   EPWM5_BASE
-#define INV_PWM1_CURRENT_H_PIN             8
-#define INV_PWM1_CURRENT_H_PIN_CONFIG      GPIO_8_EPWM5A
-#define INV_PWM1_CURRENT_L_PIN             9
-#define INV_PWM1_CURRENT_L_PIN_CONFIG      GPIO_9_EPWM5B
+#define INV_PWM1_CURRENT                EPWM5_BASE
+#define INV_PWM1_CURRENT_H_PIN          8
+#define INV_PWM1_CURRENT_H_PIN_CONFIG   GPIO_8_EPWM5A
+#define INV_PWM1_CURRENT_L_PIN          9
+#define INV_PWM1_CURRENT_L_PIN_CONFIG   GPIO_9_EPWM5B
 
-#define INV_PWM2_CURRENT                   EPWM6_BASE
-#define INV_PWM2_CURRENT_H_PIN             10
-#define INV_PWM2_CURRENT_H_PIN_CONFIG      GPIO_10_EPWM6A
-#define INV_PWM2_CURRENT_L_PIN             11
-#define INV_PWM2_CURRENT_L_PIN_CONFIG      GPIO_11_EPWM6B
+#define INV_PWM2_CURRENT                EPWM6_BASE
+#define INV_PWM2_CURRENT_H_PIN          10
+#define INV_PWM2_CURRENT_H_PIN_CONFIG   GPIO_10_EPWM6A
+#define INV_PWM2_CURRENT_L_PIN          11
+#define INV_PWM2_CURRENT_L_PIN_CONFIG   GPIO_11_EPWM6B
 
 #define BRIDGE_V_EN_PIN                 112
 #define BRIDGE_V_EN_PIN_CONFIG          GPIO_112_GPIO112
@@ -230,24 +233,23 @@
 #define SDFM_CLK_SEL_PIN                96
 #define SDFM_CLK_SEL_PIN_CONFIG         GPIO_96_GPIO96
 
-
 // ADA
-#define CS_VV2_PIN                   160
-#define CS_VV2_PIN_CONFIG            GPIO_160_GPIO160
-#define CS_VI2_PIN                   159
-#define CS_VI2_PIN_CONFIG            GPIO_159_GPIO159
-#define CS_IV2_PIN                   152
-#define CS_IV2_PIN_CONFIG            GPIO_152_GPIO152
-#define CS_II2_PIN                   151
-#define CS_II2_PIN_CONFIG            GPIO_151_GPIO151
-#define CS_VV1_PIN                   148
-#define CS_VV1_PIN_CONFIG            GPIO_148_GPIO148
-#define CS_VI1_PIN                   147
-#define CS_VI1_PIN_CONFIG            GPIO_147_GPIO147
-#define CS_IV1_PIN                   150
-#define CS_IV1_PIN_CONFIG            GPIO_150_GPIO150
-#define CS_II1_PIN                   149
-#define CS_II1_PIN_CONFIG            GPIO_149_GPIO149
+#define CS_VV2_PIN                      160
+#define CS_VV2_PIN_CONFIG               GPIO_160_GPIO160
+#define CS_VI2_PIN                      159
+#define CS_VI2_PIN_CONFIG               GPIO_159_GPIO159
+#define CS_IV2_PIN                      152
+#define CS_IV2_PIN_CONFIG               GPIO_152_GPIO152
+#define CS_II2_PIN                      151
+#define CS_II2_PIN_CONFIG               GPIO_151_GPIO151
+#define CS_VV1_PIN                      148
+#define CS_VV1_PIN_CONFIG               GPIO_148_GPIO148
+#define CS_VI1_PIN                      147
+#define CS_VI1_PIN_CONFIG               GPIO_147_GPIO147
+#define CS_IV1_PIN                      150
+#define CS_IV1_PIN_CONFIG               GPIO_150_GPIO150
+#define CS_II1_PIN                      149
+#define CS_II1_PIN_CONFIG               GPIO_149_GPIO149
 
 //FB
 #define FB_EN_PIN                       167                 // FB_V_EN and FB_I_EN merged
@@ -394,6 +396,8 @@ typedef struct waveform_generation_st
         generic_status_t status;
     } sm;
 
+    gen_runtime_t gen;
+
     struct  {
         bool from_control_loop;
         bool start_generation;
@@ -422,7 +426,7 @@ typedef struct waveform_generation_st
 
     mode_t controller;
     //rep_controller_t control;
-    //protection_error_monitor_t protection;
+    protection_error_monitor_t protection;
 
 } waveform_generation_t;
 

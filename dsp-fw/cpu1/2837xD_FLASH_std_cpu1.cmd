@@ -70,23 +70,23 @@ PAGE 1 : /* Data Memory */
    //RAMLS4        : origin = 0x00A000, length = 0x000800
    //RAMLS5        : origin = 0x00A800, length = 0x000800
 
-   RAMGS_DATA_CPU1	   : origin = 0x00C000, length = 0x005000
+   RAMGS_DATA_CPU1 : origin = 0x00C000, length = 0x005000
    //RAMGS0        : origin = 0x00C000, length = 0x001000
    //RAMGS1        : origin = 0x00D000, length = 0x001000
    //RAMGS2        : origin = 0x00E000, length = 0x001000
    //RAMGS3        : origin = 0x00F000, length = 0x001000
    //RAMGS4        : origin = 0x010000, length = 0x001000
-   RAMGS_DATA_CPU2	: origin = 0x011000, length = 0x001000
+   RAMGS_DATA_CPU2 : origin = 0x011000, length = 0x003000
    //RAMGS5        : origin = 0x011000, length = 0x001000
-   RAMGS_CPU2      : origin = 0x012000, length = 0x005FF8
    //RAMGS6        : origin = 0x012000, length = 0x001000
    //RAMGS7        : origin = 0x013000, length = 0x001000
+   RAMGS_CPU2      : origin = 0x014000, length = 0x003FF8
    //RAMGS8        : origin = 0x014000, length = 0x001000
    //RAMGS9        : origin = 0x015000, length = 0x001000
    //RAMGS10       : origin = 0x016000, length = 0x001000
    //RAMGS11       : origin = 0x017000, length = 0x000FF8  /* Uncomment for F28374D, F28376D devices */
    RAMGS11_RSVD    : origin = 0x017FF8, length = 0x000008  /* Reserve and do not use for code as per the errata advisory "Memory: Prefetching Beyond Valid Memory" */
-   RAMGS_CPU1      : origin = 0x018000, length = 0x003FF8
+   RAMGS_CPU1      : origin = 0x018000, length = 0x003ff8
    //RAMGS12       : origin = 0x018000, length = 0x001000  /* Only Available on F28379D, F28377D, F28375D devices. Remove line on other devices. */
    //RAMGS13       : origin = 0x019000, length = 0x001000  /* Only Available on F28379D, F28377D, F28375D devices. Remove line on other devices. */
    //RAMGS14       : origin = 0x01A000, length = 0x001000  /* Only Available on F28379D/_, F28377D/F28377S, F28375D/F28375S devices. Remove line on other devices. */
@@ -133,6 +133,7 @@ SECTIONS
 	app_data_cpu1		:> RAMGS_DATA_CPU1, 					PAGE = 1
  	app_data_cpu2		:> RAMGS_DATA_CPU2, 					PAGE = 1
  	.data               :> RAMGS_CPU1, 							PAGE = 1
+ 	ref_data            :> RAMGS_DATA_CPU2, 					PAGE = 1
 
        /* Far memory sections */
     .farbss             :> SDRAM_CPU1,                          PAGE = 1, ALIGN(4)  /* Far memory variables */

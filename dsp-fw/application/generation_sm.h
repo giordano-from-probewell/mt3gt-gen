@@ -46,9 +46,23 @@ void gen_sm_on_zero_cross(gen_runtime_t* r);
 void gen_sm_on_protection(gen_runtime_t* r);
 void gen_sm_turning_on(gen_runtime_t* r);
 
-// chama no loop principal após ZC; ajusta setpoints e retorna se atualizou algo
-bool gen_sm_process(gen_runtime_t* r,
-                     gen_profile_t prof,
-                     application_t* app);
+//// chama no loop principal após ZC; ajusta setpoints e retorna se atualizou algo
+//bool gen_sm_process(gen_runtime_t* r,
+//                     gen_profile_t prof,
+//                     application_t* app);
+
+
+
+
+void setupInverter(uint32_t voltage1, uint32_t voltage2,
+                   uint32_t current1, uint32_t current2,
+                   uint16_t pwm_period_ticks,
+                   uint16_t pwm_deadband_ticks);
+
+
+void gen_off(void);
+void gen_on(void);
+
+
 
 #endif //_GENERAGION_SM_H

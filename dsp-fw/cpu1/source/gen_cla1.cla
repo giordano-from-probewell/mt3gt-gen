@@ -72,14 +72,13 @@ __interrupt void Cla1Task1 ( void )
 //        GpioDataRegs.GPASET.bit.GPIO3 = 1;
 
 
+    cla_iv1.raw = SDFM1_READ_FILTER1_DATA_32BIT;
+    cla_ii1.raw = SDFM1_READ_FILTER2_DATA_32BIT;
+    cla_vv1.raw = SDFM1_READ_FILTER3_DATA_32BIT;
+    cla_vi1.raw = SDFM1_READ_FILTER4_DATA_32BIT;
 
-    cla_iv1.raw = SDFM1_READ_FILTER2_DATA_32BIT;
-    cla_ii1.raw = SDFM1_READ_FILTER1_DATA_32BIT;
-    cla_iv2.raw = SDFM1_READ_FILTER3_DATA_32BIT;
-    cla_ii2.raw = SDFM1_READ_FILTER4_DATA_32BIT;
-
-    cla_vv1.raw = SDFM2_READ_FILTER2_DATA_32BIT;
-    cla_vi1.raw = SDFM2_READ_FILTER1_DATA_32BIT;
+    cla_iv2.raw = SDFM2_READ_FILTER1_DATA_32BIT;
+    cla_ii2.raw = SDFM2_READ_FILTER2_DATA_32BIT;
     cla_vv2.raw = SDFM2_READ_FILTER3_DATA_32BIT;
     cla_vi2.raw = SDFM2_READ_FILTER4_DATA_32BIT;
 
@@ -277,8 +276,8 @@ __interrupt void Cla1Task8 ( void )
     cla_vv1.gain   = -( 1.016104 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_vi1.gain   = -( 1.019887 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_ii2.gain   = -( 1.033994 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
-    cla_iv2.gain   =  ( 1.01524 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
-    cla_vv2.gain   = -( 1.150753 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_iv2.gain   =  ( 1.01524 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION * ( 1.0 ) ;
+    cla_vv2.gain   = -( 1.150753 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ;
     cla_vi2.gain   =  ( 1.00846 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
 
 #elif defined(VGEN2)
@@ -287,8 +286,8 @@ __interrupt void Cla1Task8 ( void )
     cla_vv1.gain   = -( 1.016104 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_vi1.gain   = -( 1.019887 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_ii2.gain   = -( 1.0278997 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
-    cla_iv2.gain   =  ( 0.993639 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
-    cla_vv2.gain   = -( 1.0132098 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_iv2.gain   =  ( 0.993639 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION * ( 1.0 ) ;
+    cla_vv2.gain   = -( 1.0132098 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ;
     cla_vi2.gain   =  ( 1.4396622 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
 
 
@@ -298,8 +297,8 @@ __interrupt void Cla1Task8 ( void )
     cla_vv1.gain   = -( 1.01690988 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_vi1.gain   = -( 1.120567 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_ii2.gain   = -( 1.03305785 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
-    cla_iv2.gain   =  ( 0.98055556  ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
-    cla_vv2.gain   = -( 1.01352036 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_iv2.gain   =  ( 0.98055556  ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION * ( 1.0 ) ;
+    cla_vv2.gain   = -( 1.01352036 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ;
     cla_vi2.gain   =  ( 1.43681876 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
 
 #elif defined(VGEN_GENERIC)
@@ -308,8 +307,8 @@ __interrupt void Cla1Task8 ( void )
     cla_vv1.gain   = -( 1.017 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_vi1.gain   = -( 1.020 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_ii2.gain   = -( 1.030 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
-    cla_iv2.gain   =  ( 0.99  ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
-    cla_vv2.gain   = -( 1.014 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_iv2.gain   =  ( 0.99  ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION * ( 1.0 ) ;
+    cla_vv2.gain   = -( 1.014 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ;
     cla_vi2.gain   =  ( 1.44) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
 
 #elif  defined(VGENCAL)
@@ -318,8 +317,8 @@ __interrupt void Cla1Task8 ( void )
     cla_vv1.gain   = -( 1.0 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_vi1.gain   = -( 1.0 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_ii2.gain   = -( 1.0 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
-    cla_iv2.gain   =  ( 1.0 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
-    cla_vv2.gain   = -( 1.0 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
+    cla_iv2.gain   =  ( 1.0 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION * ( 1.0 ) ;
+    cla_vv2.gain   = -( 1.0 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ;
     cla_vi2.gain   =  ( 1.0 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
 
 #else   //to search the transformer order, in feedfoward mode
@@ -328,9 +327,9 @@ __interrupt void Cla1Task8 ( void )
     cla_vv1.gain   = -( 1.0 ) * ( ( ( 996000.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_vi1.gain   = -( 1.0 ) * ( ( 1.0 / 100e-3 ) * ONE_BIT_RESOLUTION ) * ( 1.0 ) ;
     cla_ii2.gain   = -( 1.0 ) * ( 1.0 / 1.0e-3 ) * ONE_BIT_RESOLUTION * ( 0.5f );
-    cla_iv2.gain   =  ( 1.0 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION ;
-    cla_vv2.gain   = -( 1.0 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ; //div res * V/bit / ADA gain
-    cla_vi2.gain   =  ( 1.0 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f)  ;
+    cla_iv2.gain   =  ( 1.0 ) * ( ( 3740.0f + 1000.0f ) / 1000.0f ) * ONE_BIT_RESOLUTION * ( 1.0 ) ;
+    cla_vv2.gain   = -( 1.0 ) * ( ( 996000.0f + 180.0f ) / 180.0f ) * ONE_BIT_RESOLUTION  * ( 0.5f ) ;
+    cla_vi2.gain   =  ( 1.0 ) * ( ( 1.0 / 750.0e-3 ) * ONE_BIT_RESOLUTION ) / ( 8.0f )  ;
 
 
 #endif
