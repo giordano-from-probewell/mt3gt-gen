@@ -132,10 +132,6 @@ static void i_cla_on(void)  { Cla1ForceTask5(); }
 static void i_cla_off(void) { Cla1ForceTask6(); }
 
 
-
-
-
-
 static void voltage_setpoint_write(float val) {
     cla_voltage_setpoint = val;
 }
@@ -144,25 +140,12 @@ static void current_setpoint_write(float val) {
     cla_current_setpoint = val;
 }
 
-
-void app_cpu1_init_generation(void)
+void app_cpu1_init_generation(application_t *app)
 {
-    gen_sm_hw_cb_t vhw = {
-        .pwm_clear_trip = v_pwm_clear_trip,
-        .pwm_force_trip = v_pwm_force_trip,
-        .cla_on_task    = v_cla_on,
-        .cla_off_task   = v_cla_off,
-    };
-    gen_sm_hw_cb_t ihw = {
-        .pwm_clear_trip = i_pwm_clear_trip,
-        .pwm_force_trip = i_pwm_force_trip,
-        .cla_on_task    = i_cla_on,
-        .cla_off_task   = i_cla_off,
-    };
-
-    // ramp 0.01 per tick, tick 5 ms
-    gen_sm_init(&app.generation.voltage, &app.generation.voltage.wg, &vhw, 0.01f, 5);
-    gen_sm_init(&app.generation.current, &app.generation.current.wg, &ihw, 0.01f, 5);
+    gen_sm_hw_cb_t vhw = { v_pwm_clear_trip, v_pwm_force_trip, v_cla_on, v_cla_off };
+    gen_sm_hw_cb_t ihw = { i_pwm_clear_trip, i_pwm_force_trip, i_cla_on, i_cla_off };
+    gen_sm_init(&app->generation.voltage, &app->voltage_wg, &vhw, 0.01f, 5);
+    gen_sm_init(&app->generation.current, &app->current_wg, &ihw, 0.01f, 5);
 }
 
 void app_cpu1_generation_tick(my_time_t now_ms)
@@ -171,7 +154,7 @@ void app_cpu1_generation_tick(my_time_t now_ms)
     gen_sm_tick(&app.generation.current, now_ms);
 }
 
-// exemplos de comandos vindos por IPC/CLI:
+// IPC/CLI signals:
 void cmd_set_scale_voltage(float32_t s) { gen_sm_request_scale(&app.generation.voltage, s); }
 void cmd_set_scale_current(float32_t s) { gen_sm_request_scale(&app.generation.current, s); }
 
@@ -308,71 +291,71 @@ static void cpu1_start  (application_t *app, my_time_t now)
     reference_init(&app->generation.voltage.wg->ref);
     reference_init(&app->generation.current.wg->ref);
 
-//    //PWM max = 90% PWM min = 10%
-//    init_protection(&app->generation.voltage.protection,
-//                    80, 200, 50.0, 10.0,
-//                    ((app->generation.config.inverter_pwm_steps)*90)/100,
-//                    ((app->generation.config.inverter_pwm_steps)*10)/100
-//    );
-//
-//    init_protection(&app->generation.current.protection,
-//                    60, 600, 90.0, 0.8,
-//                    ((app->generation.config.inverter_pwm_steps)*90)/100,
-//                    ((app->generation.config.inverter_pwm_steps)*10)/100
-//    );
-//
-//    app->generation.voltage.controller = MODE_NONE;
-//    app->generation.current.controller = MODE_NONE;
-//
-//    app->generation.voltage.config.scale_requested = 0.0;
-//    app->generation.current.config.scale_requested= 0.0;
-//
-//
-//    app->generation.current.controller = MODE_FEEDFORWARD;
-//    app->generation.voltage.controller = MODE_FEEDFORWARD;
-//
-//    app->generation.current.command.disable_from_cli = false;
-//    app->generation.current.command.enable_from_cli = false;
-//    app->generation.current.config.gen_type = GENERATING_CURRENT;
-//    app->generation.current.command.enable = false;
-//    app->generation.current.status.ready_to_generate = false;
-//    app->generation.current.status.generating = false;
-//    app->generation.current.trigger.from_control_loop = false;
-//    app->generation.current.sm.state = STATE_INIT;
-//
-//    app->generation.voltage.command.disable_from_cli = false;
-//    app->generation.voltage.command.enable_from_cli = false;
-//    app->generation.voltage.config.gen_type = GENERATING_VOLTAGE;
-//    app->generation.voltage.command.enable = false;
-//    app->generation.voltage.status.ready_to_generate = false;
-//    app->generation.voltage.status.generating = false;
-//    app->generation.voltage.trigger.from_control_loop = false;
-//    app->generation.voltage.sm.state = STATE_INIT;
-//
-//    app->generation.current.command.disable_from_cli = false;
-//    app->generation.current.command.disable_from_comm = false;
-//    app->generation.current.command.disable_from_protection_by_control_error = false;
-//    app->generation.current.command.disable_from_protection_by_saturation = false;
-//    app->generation.current.command.enable = false;
-//    app->generation.current.command.enable_from_cli = false;
-//    app->generation.current.command.disable_from_cli = false;
-//    app->generation.current.command.enable_from_comm = false;
-//
-//    app->generation.voltage.command.disable_from_cli = false;
-//    app->generation.voltage.command.disable_from_comm = false;
-//    app->generation.voltage.command.disable_from_protection_by_control_error = false;
-//    app->generation.voltage.command.disable_from_protection_by_saturation = false;
-//    app->generation.voltage.command.enable = false;
-//    app->generation.voltage.command.enable_from_cli = false;
-//    app->generation.voltage.command.disable_from_cli = false;
-//    app->generation.voltage.command.enable_from_comm = false;
+    //    //PWM max = 90% PWM min = 10%
+    //    init_protection(&app->generation.voltage.protection,
+    //                    80, 200, 50.0, 10.0,
+    //                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+    //                    ((app->generation.config.inverter_pwm_steps)*10)/100
+    //    );
+    //
+    //    init_protection(&app->generation.current.protection,
+    //                    60, 600, 90.0, 0.8,
+    //                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+    //                    ((app->generation.config.inverter_pwm_steps)*10)/100
+    //    );
+    //
+    //    app->generation.voltage.controller = MODE_NONE;
+    //    app->generation.current.controller = MODE_NONE;
+    //
+    //    app->generation.voltage.config.scale_requested = 0.0;
+    //    app->generation.current.config.scale_requested= 0.0;
+    //
+    //
+    //    app->generation.current.controller = MODE_FEEDFORWARD;
+    //    app->generation.voltage.controller = MODE_FEEDFORWARD;
+    //
+    //    app->generation.current.command.disable_from_cli = false;
+    //    app->generation.current.command.enable_from_cli = false;
+    //    app->generation.current.config.gen_type = GENERATING_CURRENT;
+    //    app->generation.current.command.enable = false;
+    //    app->generation.current.status.ready_to_generate = false;
+    //    app->generation.current.status.generating = false;
+    //    app->generation.current.trigger.from_control_loop = false;
+    //    app->generation.current.sm.state = STATE_INIT;
+    //
+    //    app->generation.voltage.command.disable_from_cli = false;
+    //    app->generation.voltage.command.enable_from_cli = false;
+    //    app->generation.voltage.config.gen_type = GENERATING_VOLTAGE;
+    //    app->generation.voltage.command.enable = false;
+    //    app->generation.voltage.status.ready_to_generate = false;
+    //    app->generation.voltage.status.generating = false;
+    //    app->generation.voltage.trigger.from_control_loop = false;
+    //    app->generation.voltage.sm.state = STATE_INIT;
+    //
+    //    app->generation.current.command.disable_from_cli = false;
+    //    app->generation.current.command.disable_from_comm = false;
+    //    app->generation.current.command.disable_from_protection_by_control_error = false;
+    //    app->generation.current.command.disable_from_protection_by_saturation = false;
+    //    app->generation.current.command.enable = false;
+    //    app->generation.current.command.enable_from_cli = false;
+    //    app->generation.current.command.disable_from_cli = false;
+    //    app->generation.current.command.enable_from_comm = false;
+    //
+    //    app->generation.voltage.command.disable_from_cli = false;
+    //    app->generation.voltage.command.disable_from_comm = false;
+    //    app->generation.voltage.command.disable_from_protection_by_control_error = false;
+    //    app->generation.voltage.command.disable_from_protection_by_saturation = false;
+    //    app->generation.voltage.command.enable = false;
+    //    app->generation.voltage.command.enable_from_cli = false;
+    //    app->generation.voltage.command.disable_from_cli = false;
+    //    app->generation.voltage.command.enable_from_comm = false;
 
     app->generation.sync_flag = false;
 
 
     app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
 
-    app_cpu1_init_generation();
+    app_cpu1_init_generation(app);
 
 }
 
@@ -383,6 +366,11 @@ bool flag_amp05 = false;
 bool flag_amp1 = false;
 bool flag_amp2 = false;
 
+bool flag_gen1 = false;
+bool flag_gen2 = false;
+bool flag_gen3 = false;
+
+float32_t new_scale = 1.0;
 
 
 static void cpu1_running(application_t *app, my_time_t now)
@@ -416,6 +404,21 @@ static void cpu1_running(application_t *app, my_time_t now)
         ipc_log_event_from_cpu1(100/*EVT_IPC_TX 100*/, cmd, (now&0xFFFF));
         flag_test = false;
     }
+
+    if(flag_gen1){
+        gen_sm_request_enable(&app->generation.voltage);
+        flag_gen1=false;
+    }
+    if(flag_gen2){
+        gen_sm_request_disable(&app->generation.voltage);
+        flag_gen2=false;
+    }
+    if(flag_gen3){
+        gen_sm_request_scale(&app->generation.voltage, new_scale);
+        flag_gen3=false;
+    }
+
+
 
 }
 

@@ -1,8 +1,8 @@
 #include "generation_sm.h"
+#include "application.h"            // defines waveform_generation_t with command/config/status
+#include "reference_generation.h"
 #include <math.h>
 
-
-// clamp
 static inline float32_t clamp01(float32_t x) {
     if (x < 0.0f) return 0.0f;
     if (x > 1.0f) return 1.0f;
@@ -13,7 +13,7 @@ static void apply_scale(gen_sm_ch_t *ch, float32_t s)
 {
     s = clamp01(s);
     ch->scale_cur = s;
-    ch->wg->config.scale = s;   // mirror
+    ch->wg->config.scale = s;   // mirror in the app "model"
 }
 
 void gen_sm_init(gen_sm_ch_t *ch,
@@ -24,15 +24,14 @@ void gen_sm_init(gen_sm_ch_t *ch,
 {
     ch->wg = wg;
     ch->hw = *hw;
-    ch->ramp_slew     = (ramp_slew_per_tick > 0.f) ? ramp_slew_per_tick : 0.01f;
-    ch->tick_period_ms= (tick_period_ms != 0u) ? tick_period_ms : 5u;
+    ch->ramp_slew      = (ramp_slew_per_tick > 0.f) ? ramp_slew_per_tick : 0.01f;
+    ch->tick_period_ms = (tick_period_ms != 0u) ? tick_period_ms : 5u;
 
     ch->state = GEN_SM_OFF;
     ch->next_tick_ms = 0;
     ch->scale_cur = 0.f;
     apply_scale(ch, 0.f);
 
-    // espelha flags iniciais
     ch->wg->status.ready_to_generate = false;
     ch->wg->status.generating        = false;
 }
@@ -56,11 +55,8 @@ void gen_sm_request_scale(gen_sm_ch_t *ch, float32_t new_scale)
 {
     ch->wg->config.scale_requested = clamp01(new_scale);
     if (ch->state == GEN_SM_RUN) {
-        // inicia micro rampa dentro do RUN
-        if (ch->wg->config.scale_requested > ch->scale_cur)
-            ch->state = GEN_SM_RAMP_UP;
-        else if (ch->wg->config.scale_requested < ch->scale_cur)
-            ch->state = GEN_SM_RAMP_DOWN;
+        if (ch->wg->config.scale_requested > ch->scale_cur) ch->state = GEN_SM_RAMP_UP;
+        else if (ch->wg->config.scale_requested < ch->scale_cur) ch->state = GEN_SM_RAMP_DOWN;
     }
 }
 
@@ -75,13 +71,10 @@ void gen_sm_fault(gen_sm_ch_t *ch)
 static void step_ramp_to(gen_sm_ch_t *ch, float32_t target)
 {
     float32_t s = ch->scale_cur;
-    if (fabsf(target - s) <= ch->ramp_slew) {
-        s = target;
-    } else if (target > s) {
-        s += ch->ramp_slew;
-    } else {
-        s -= ch->ramp_slew;
-    }
+    float32_t st = ch->ramp_slew;
+    if (fabsf(target - s) <= st) s = target;
+    else if (target > s)         s += st;
+    else                         s -= st;
     apply_scale(ch, s);
 }
 
@@ -90,10 +83,9 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
     if (now < ch->next_tick_ms) return;
     ch->next_tick_ms = now + ch->tick_period_ms;
 
-    // atalhos a flags de proteção/command
+    // Protection shortcut: if any protection requests disable, fault out
     bool prot_err = ch->wg->command.disable_from_protection_by_control_error ||
                     ch->wg->command.disable_from_protection_by_saturation;
-
     if (prot_err && ch->state != GEN_SM_OFF && ch->state != GEN_SM_FAULT) {
         gen_sm_fault(ch);
         return;
@@ -101,7 +93,6 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
 
     switch (ch->state) {
     case GEN_SM_OFF:
-        // esperando enable externo (CLI/IPC)
         if (ch->wg->command.enable || ch->wg->command.enable_from_cli || ch->wg->command.enable_from_comm) {
             ch->state = GEN_SM_ARMING;
         }
@@ -112,24 +103,15 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
         if (ch->hw.cla_on_task)    ch->hw.cla_on_task();
         ch->wg->status.ready_to_generate = true;
         ch->wg->status.generating        = true;
-
-        // decide alvo inicial
-        if (ch->wg->config.scale_requested <= ch->scale_cur) {
-            ch->state = GEN_SM_RUN;
-        } else {
-            ch->state = GEN_SM_RAMP_UP;
-        }
+        ch->state = (ch->wg->config.scale_requested <= ch->scale_cur) ? GEN_SM_RUN : GEN_SM_RAMP_UP;
         break;
 
     case GEN_SM_RAMP_UP:
         step_ramp_to(ch, ch->wg->config.scale_requested);
-        if (ch->scale_cur >= ch->wg->config.scale_requested) {
-            ch->state = GEN_SM_RUN;
-        }
+        if (ch->scale_cur >= ch->wg->config.scale_requested) ch->state = GEN_SM_RUN;
         break;
 
     case GEN_SM_RUN:
-        // nada pesado aqui, só vigia pedidos
         if (ch->wg->command.disable || ch->wg->command.disable_from_cli || ch->wg->command.disable_from_comm) {
             ch->state = GEN_SM_RAMP_DOWN;
             ch->wg->config.scale_requested = 0.f;
@@ -138,9 +120,7 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
 
     case GEN_SM_RAMP_DOWN:
         step_ramp_to(ch, 0.f);
-        if (ch->scale_cur <= 0.f) {
-            ch->state = GEN_SM_DISARMING;
-        }
+        if (ch->scale_cur <= 0.f) ch->state = GEN_SM_DISARMING;
         break;
 
     case GEN_SM_DISARMING:
@@ -153,19 +133,14 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
 
     case GEN_SM_FAULT:
     default:
-        // fica parado até alguém limpar as flags e pedir enable novamente
         break;
     }
 }
 
 void gen_sm_change_waveform_soft(gen_sm_ch_t *ch, reference_generation_t *new_ref)
 {
-    // desce
+    (void)new_ref; // App layer will swap reference safely when scale==0
     ch->wg->config.scale_requested = 0.f;
     ch->state = GEN_SM_RAMP_DOWN;
-    // a aplicação: chame gen_sm_tick até chegar em DISARMING->OFF,
-    // troque a referência e volte a habilitar
-    (void)new_ref; // troca física da ref deve ocorrer no ponto em que scale==0
 }
-
 

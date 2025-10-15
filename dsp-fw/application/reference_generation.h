@@ -22,7 +22,6 @@ typedef struct reference_generation_st
     float32_t *waveform1;
     float32_t *waveform2;
 
-
     uint16_t waveform_size;
     uint16_t waveform_index;
     uint8_t type;
