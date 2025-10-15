@@ -1,14 +1,7 @@
 #ifndef __GENERIC_DEFINITIONS_H_
 #define __GENERIC_DEFINITIONS_H_
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include <math.h>
 
-#include "my_time.h"
 
 extern char *INITIALIZED;
 
@@ -45,9 +38,5 @@ typedef  enum generic_states_en
 
 
 
-
-
-
-void setupProfilingGPIO(void);
 
 #endif

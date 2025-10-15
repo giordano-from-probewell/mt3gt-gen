@@ -9,6 +9,7 @@
 #include "frequency.h"
 
 #include "amplifier.h"
+#include "generation.h"
 #include "generation_sm.h"
 
 #define TO_CPU1 0
@@ -38,6 +39,8 @@ void _cla1_interruption_config(void);
 void _cla1_memory_config(void);
 void _cla1_link_from_sdfm(void);
 void _sdfm_init(void);
+void generation_init(application_t* app);
+
 generic_status_t _ampops_init(application_t *app);
 
 __interrupt void access_violation(void);
@@ -67,19 +70,164 @@ volatile uint32_t fetchAddress;
 bool flag_zc = false; //zero crossing mark
 int c1,p1,l1;
 
- int voltage_event = 0;
- int current_event = 0;
- int voltage_overpower_counter = 0;
+int voltage_event = 0;
+int current_event = 0;
+int voltage_overpower_counter = 0;
 
 
 
+// ---- VOLTAGE ----
+static void voltage_pwm_on(void) {
+    EPWM_clearTripZoneFlag(INV_PWM1_VOLTAGE, EPWM_TZ_FLAG_OST);
+    EPWM_clearTripZoneFlag(INV_PWM2_VOLTAGE, EPWM_TZ_FLAG_OST);
+    Cla1ForceTask3();
+}
+
+static void voltage_pwm_off(void) {
+    EPWM_forceTripZoneEvent(INV_PWM1_VOLTAGE, EPWM_TZ_FORCE_EVENT_OST);
+    EPWM_forceTripZoneEvent(INV_PWM2_VOLTAGE, EPWM_TZ_FORCE_EVENT_OST);
+    Cla1ForceTask4();
+}
+
+static void v_pwm_clear_trip(void) {
+    EPWM_clearTripZoneFlag(INV_PWM1_VOLTAGE, EPWM_TZ_FLAG_OST);
+    EPWM_clearTripZoneFlag(INV_PWM2_VOLTAGE, EPWM_TZ_FLAG_OST);
+}
+
+static void v_pwm_force_trip(void) {
+    EPWM_forceTripZoneEvent(INV_PWM1_VOLTAGE, EPWM_TZ_FORCE_EVENT_OST);
+    EPWM_forceTripZoneEvent(INV_PWM2_VOLTAGE, EPWM_TZ_FORCE_EVENT_OST);
+}
+
+static void v_cla_on(void)  { Cla1ForceTask3(); }
+
+static void v_cla_off(void) { Cla1ForceTask4(); }
+
+
+// ---- CURRENT ----
+static void current_pwm_on(void) {
+    EPWM_clearTripZoneFlag(INV_PWM1_CURRENT, EPWM_TZ_FLAG_OST);
+    EPWM_clearTripZoneFlag(INV_PWM2_CURRENT, EPWM_TZ_FLAG_OST);
+    Cla1ForceTask5();
+}
+
+static void current_pwm_off(void) {
+    EPWM_forceTripZoneEvent(INV_PWM1_CURRENT, EPWM_TZ_FORCE_EVENT_OST);
+    EPWM_forceTripZoneEvent(INV_PWM2_CURRENT, EPWM_TZ_FORCE_EVENT_OST);
+    Cla1ForceTask6();
+}
+
+static void i_pwm_clear_trip(void) {
+    EPWM_clearTripZoneFlag(INV_PWM1_CURRENT, EPWM_TZ_FLAG_OST);
+    EPWM_clearTripZoneFlag(INV_PWM2_CURRENT, EPWM_TZ_FLAG_OST);
+}
+
+static void i_pwm_force_trip(void) {
+    EPWM_forceTripZoneEvent(INV_PWM1_CURRENT, EPWM_TZ_FORCE_EVENT_OST);
+    EPWM_forceTripZoneEvent(INV_PWM2_CURRENT, EPWM_TZ_FORCE_EVENT_OST);
+}
+
+static void i_cla_on(void)  { Cla1ForceTask5(); }
+
+static void i_cla_off(void) { Cla1ForceTask6(); }
+
+
+
+
+
+
+static void voltage_setpoint_write(float val) {
+    cla_voltage_setpoint = val;
+}
+
+static void current_setpoint_write(float val) {
+    cla_current_setpoint = val;
+}
+
+
+void app_cpu1_init_generation(void)
+{
+    gen_sm_hw_cb_t vhw = {
+        .pwm_clear_trip = v_pwm_clear_trip,
+        .pwm_force_trip = v_pwm_force_trip,
+        .cla_on_task    = v_cla_on,
+        .cla_off_task   = v_cla_off,
+    };
+    gen_sm_hw_cb_t ihw = {
+        .pwm_clear_trip = i_pwm_clear_trip,
+        .pwm_force_trip = i_pwm_force_trip,
+        .cla_on_task    = i_cla_on,
+        .cla_off_task   = i_cla_off,
+    };
+
+    // ramp 0.01 per tick, tick 5 ms
+    gen_sm_init(&app.generation.voltage, &app.generation.voltage.wg, &vhw, 0.01f, 5);
+    gen_sm_init(&app.generation.current, &app.generation.current.wg, &ihw, 0.01f, 5);
+}
+
+void app_cpu1_generation_tick(my_time_t now_ms)
+{
+    gen_sm_tick(&app.generation.voltage, now_ms);
+    gen_sm_tick(&app.generation.current, now_ms);
+}
+
+// exemplos de comandos vindos por IPC/CLI:
+void cmd_set_scale_voltage(float32_t s) { gen_sm_request_scale(&app.generation.voltage, s); }
+void cmd_set_scale_current(float32_t s) { gen_sm_request_scale(&app.generation.current, s); }
+
+void cmd_enable_voltage(void) { gen_sm_request_enable(&app.generation.voltage); }
+void cmd_disable_voltage(void){ gen_sm_request_disable(&app.generation.voltage); }
+
+void cmd_enable_current(void) { gen_sm_request_enable(&app.generation.current); }
+void cmd_disable_current(void){ gen_sm_request_disable(&app.generation.current); }
+
+//todo:
+// void on_protection_trip_voltage(void){ gen_sm_fault(&app.generation.voltage); }
+// void on_protection_trip_current(void){ gen_sm_fault(&app.generation.current); }
 
 void ipc_on_cmd_from_cpu2(uint8_t cmd, const uint8_t* payload, uint8_t len)
 {
-
     ipc_log_event_from_cpu1(500, cmd, (uint16_t)(my_time(NULL)&0xFFFF));
 }
 
+
+static void handle_ipc_command(uint32_t cmd, float32_t arg)
+{
+    switch (cmd) {
+    case 1:
+        gen_ch_enable(&app.generation.voltage);
+        gen_ch_enable(&app.generation.current);
+        break;
+    case 2:
+        gen_ch_disable(&app.generation.voltage);
+        gen_ch_disable(&app.generation.current);
+        break;
+    case 3:
+        gen_ch_enable(&app.generation.voltage);
+        break;
+    case 4:
+        gen_ch_disable(&app.generation.voltage);
+        break;
+    case 5:
+        gen_ch_enable(&app.generation.current);
+        break;
+    case 6:
+        gen_ch_disable(&app.generation.current);
+        break;
+    case 7: // set scale voltage
+        //gen_ch_set_target(&app.generation.voltage, arg, app.generation.voltage.tgt.waveform_target);
+        break;
+    case 8: // set scale corrente
+        //gen_ch_set_target(&app.generation.current, arg, app.generation.current.tgt.waveform_target);
+        break;
+    case 9: // trocar waveform dos dois (ex.: seno/quadrada etc.)
+        //gen_ch_set_target(&app.generation.voltage, app.generation.voltage.tgt.scale_target, (uint8_t)arg);
+        //gen_ch_set_target(&app.generation.current, app.generation.current.tgt.scale_target, (uint8_t)arg);
+        break;
+    default:
+        break;
+    }
+}
 
 
 
@@ -144,8 +292,8 @@ static void cpu1_start  (application_t *app, my_time_t now)
 
 
 
-//    gen_sm_turning_on();
-//
+    //    gen_sm_turning_on();
+    //
     setupInverter(
             INV_PWM1_VOLTAGE,
             INV_PWM2_VOLTAGE,
@@ -157,72 +305,75 @@ static void cpu1_start  (application_t *app, my_time_t now)
 
 
 
-    reference_init(&app->generation.voltage.ref);
-    reference_init(&app->generation.current.ref);
+    reference_init(&app->generation.voltage.wg->ref);
+    reference_init(&app->generation.current.wg->ref);
 
-    //PWM max = 90% PWM min = 10%
-    init_protection(&app->generation.voltage.protection,
-                    80, 200, 50.0, 10.0,
-                    ((app->generation.config.inverter_pwm_steps)*90)/100,
-                    ((app->generation.config.inverter_pwm_steps)*10)/100
-    );
-
-    init_protection(&app->generation.current.protection,
-                    60, 600, 90.0, 0.8,
-                    ((app->generation.config.inverter_pwm_steps)*90)/100,
-                    ((app->generation.config.inverter_pwm_steps)*10)/100
-    );
-
-    app->generation.voltage.controller = MODE_NONE;
-    app->generation.current.controller = MODE_NONE;
-
-    app->generation.voltage.config.scale_requested = 0.0;
-    app->generation.current.config.scale_requested= 0.0;
-
-
-    app->generation.current.controller = MODE_FEEDFORWARD;
-    app->generation.voltage.controller = MODE_FEEDFORWARD;
-
-    app->generation.current.command.disable_from_cli = false;
-    app->generation.current.command.enable_from_cli = false;
-    app->generation.current.config.gen_type = GENERATING_CURRENT;
-    app->generation.current.command.enable = false;
-    app->generation.current.status.ready_to_generate = false;
-    app->generation.current.status.generating = false;
-    app->generation.current.trigger.from_control_loop = false;
-    app->generation.current.sm.state = STATE_INIT;
-
-    app->generation.voltage.command.disable_from_cli = false;
-    app->generation.voltage.command.enable_from_cli = false;
-    app->generation.voltage.config.gen_type = GENERATING_VOLTAGE;
-    app->generation.voltage.command.enable = false;
-    app->generation.voltage.status.ready_to_generate = false;
-    app->generation.voltage.status.generating = false;
-    app->generation.voltage.trigger.from_control_loop = false;
-    app->generation.voltage.sm.state = STATE_INIT;
-
-    app->generation.current.command.disable_from_cli = false;
-    app->generation.current.command.disable_from_comm = false;
-    app->generation.current.command.disable_from_protection_by_control_error = false;
-    app->generation.current.command.disable_from_protection_by_saturation = false;
-    app->generation.current.command.enable = false;
-    app->generation.current.command.enable_from_cli = false;
-    app->generation.current.command.disable_from_cli = false;
-    app->generation.current.command.enable_from_comm = false;
-
-    app->generation.voltage.command.disable_from_cli = false;
-    app->generation.voltage.command.disable_from_comm = false;
-    app->generation.voltage.command.disable_from_protection_by_control_error = false;
-    app->generation.voltage.command.disable_from_protection_by_saturation = false;
-    app->generation.voltage.command.enable = false;
-    app->generation.voltage.command.enable_from_cli = false;
-    app->generation.voltage.command.disable_from_cli = false;
-    app->generation.voltage.command.enable_from_comm = false;
+//    //PWM max = 90% PWM min = 10%
+//    init_protection(&app->generation.voltage.protection,
+//                    80, 200, 50.0, 10.0,
+//                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+//                    ((app->generation.config.inverter_pwm_steps)*10)/100
+//    );
+//
+//    init_protection(&app->generation.current.protection,
+//                    60, 600, 90.0, 0.8,
+//                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+//                    ((app->generation.config.inverter_pwm_steps)*10)/100
+//    );
+//
+//    app->generation.voltage.controller = MODE_NONE;
+//    app->generation.current.controller = MODE_NONE;
+//
+//    app->generation.voltage.config.scale_requested = 0.0;
+//    app->generation.current.config.scale_requested= 0.0;
+//
+//
+//    app->generation.current.controller = MODE_FEEDFORWARD;
+//    app->generation.voltage.controller = MODE_FEEDFORWARD;
+//
+//    app->generation.current.command.disable_from_cli = false;
+//    app->generation.current.command.enable_from_cli = false;
+//    app->generation.current.config.gen_type = GENERATING_CURRENT;
+//    app->generation.current.command.enable = false;
+//    app->generation.current.status.ready_to_generate = false;
+//    app->generation.current.status.generating = false;
+//    app->generation.current.trigger.from_control_loop = false;
+//    app->generation.current.sm.state = STATE_INIT;
+//
+//    app->generation.voltage.command.disable_from_cli = false;
+//    app->generation.voltage.command.enable_from_cli = false;
+//    app->generation.voltage.config.gen_type = GENERATING_VOLTAGE;
+//    app->generation.voltage.command.enable = false;
+//    app->generation.voltage.status.ready_to_generate = false;
+//    app->generation.voltage.status.generating = false;
+//    app->generation.voltage.trigger.from_control_loop = false;
+//    app->generation.voltage.sm.state = STATE_INIT;
+//
+//    app->generation.current.command.disable_from_cli = false;
+//    app->generation.current.command.disable_from_comm = false;
+//    app->generation.current.command.disable_from_protection_by_control_error = false;
+//    app->generation.current.command.disable_from_protection_by_saturation = false;
+//    app->generation.current.command.enable = false;
+//    app->generation.current.command.enable_from_cli = false;
+//    app->generation.current.command.disable_from_cli = false;
+//    app->generation.current.command.enable_from_comm = false;
+//
+//    app->generation.voltage.command.disable_from_cli = false;
+//    app->generation.voltage.command.disable_from_comm = false;
+//    app->generation.voltage.command.disable_from_protection_by_control_error = false;
+//    app->generation.voltage.command.disable_from_protection_by_saturation = false;
+//    app->generation.voltage.command.enable = false;
+//    app->generation.voltage.command.enable_from_cli = false;
+//    app->generation.voltage.command.disable_from_cli = false;
+//    app->generation.voltage.command.enable_from_comm = false;
 
     app->generation.sync_flag = false;
 
 
     app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
+
+    app_cpu1_init_generation();
+
 }
 
 
@@ -238,40 +389,24 @@ static void cpu1_running(application_t *app, my_time_t now)
 {
     ipc_service_cpu1(); //try to send msg to cpu2
     ipc_rx_service_cpu1(); //treat incoming message from cpu2
+
+    app_cpu1_generation_tick(now);
+
     amplifier_system_poll(now);
 
     if(flag_amp1){
         flag_amp1=false;
         amplifier_request_gain(AFE_VV1, IN_GAIN_1, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VI1, IN_GAIN_1, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VV2, IN_GAIN_1, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VI2, IN_GAIN_1, OUT_GAIN_1);
-        amplifier_request_gain(AFE_IV1, IN_GAIN_1, OUT_GAIN_1);
-        amplifier_request_gain(AFE_II1, IN_GAIN_1, OUT_GAIN_1);
-        amplifier_request_gain(AFE_IV2, IN_GAIN_1, OUT_GAIN_1);
-        amplifier_request_gain(AFE_II2, IN_GAIN_1, OUT_GAIN_1);
+
     }
     if(flag_amp05){
         flag_amp05=false;
         amplifier_request_gain(AFE_VV1, IN_GAIN_0_5, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VI1, IN_GAIN_0_5, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VV2, IN_GAIN_0_5, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VI2, IN_GAIN_0_5, OUT_GAIN_1);
-        amplifier_request_gain(AFE_IV1, IN_GAIN_0_5, OUT_GAIN_1);
-        amplifier_request_gain(AFE_II1, IN_GAIN_0_5, OUT_GAIN_1);
-        amplifier_request_gain(AFE_IV2, IN_GAIN_0_5, OUT_GAIN_1);
-        amplifier_request_gain(AFE_II2, IN_GAIN_0_5, OUT_GAIN_1);
+
     }
     if(flag_amp2){
         flag_amp2=false;
         amplifier_request_gain(AFE_VV1, IN_GAIN_2, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VI1, IN_GAIN_2, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VV2, IN_GAIN_2, OUT_GAIN_1);
-        amplifier_request_gain(AFE_VI2, IN_GAIN_2, OUT_GAIN_1);
-        amplifier_request_gain(AFE_IV1, IN_GAIN_2, OUT_GAIN_1);
-        amplifier_request_gain(AFE_II1, IN_GAIN_2, OUT_GAIN_1);
-        amplifier_request_gain(AFE_IV2, IN_GAIN_2, OUT_GAIN_1);
-        amplifier_request_gain(AFE_II2, IN_GAIN_2, OUT_GAIN_1);
     }
 
     if (flag_test)
@@ -477,187 +612,187 @@ void _app_gpio_init(void)
 
 
     //SPI ADA4254 CS
-        GPIO_writePin(CS_VV1_PIN,1);
-        GPIO_setDirectionMode(CS_VV1_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_VV1_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_VV1_PIN_CONFIG);
+    GPIO_writePin(CS_VV1_PIN,1);
+    GPIO_setDirectionMode(CS_VV1_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_VV1_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_VV1_PIN_CONFIG);
 
-        GPIO_writePin(CS_VI1_PIN,1);
-        GPIO_setDirectionMode(CS_VI1_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_VI1_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_VI1_PIN_CONFIG);
+    GPIO_writePin(CS_VI1_PIN,1);
+    GPIO_setDirectionMode(CS_VI1_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_VI1_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_VI1_PIN_CONFIG);
 
-        GPIO_writePin(CS_IV1_PIN,1);
-        GPIO_setDirectionMode(CS_IV1_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_IV1_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_IV1_PIN_CONFIG);
+    GPIO_writePin(CS_IV1_PIN,1);
+    GPIO_setDirectionMode(CS_IV1_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_IV1_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_IV1_PIN_CONFIG);
 
-        GPIO_writePin(CS_II1_PIN,1);
-        GPIO_setDirectionMode(CS_II1_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_II1_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_II1_PIN_CONFIG);
+    GPIO_writePin(CS_II1_PIN,1);
+    GPIO_setDirectionMode(CS_II1_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_II1_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_II1_PIN_CONFIG);
 
-        GPIO_writePin(CS_VV2_PIN,1);
-        GPIO_setDirectionMode(CS_VV2_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_VV2_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_VV2_PIN_CONFIG);
+    GPIO_writePin(CS_VV2_PIN,1);
+    GPIO_setDirectionMode(CS_VV2_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_VV2_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_VV2_PIN_CONFIG);
 
-        GPIO_writePin(CS_VI2_PIN,1);
-        GPIO_setDirectionMode(CS_VI2_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_VI2_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_VI2_PIN_CONFIG);
+    GPIO_writePin(CS_VI2_PIN,1);
+    GPIO_setDirectionMode(CS_VI2_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_VI2_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_VI2_PIN_CONFIG);
 
-        GPIO_writePin(CS_IV2_PIN,1);
-        GPIO_setDirectionMode(CS_IV2_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_IV2_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_IV2_PIN_CONFIG);
+    GPIO_writePin(CS_IV2_PIN,1);
+    GPIO_setDirectionMode(CS_IV2_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_IV2_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_IV2_PIN_CONFIG);
 
-        GPIO_writePin(CS_II2_PIN,1);
-        GPIO_setDirectionMode(CS_II2_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(CS_II2_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(CS_II2_PIN_CONFIG);
+    GPIO_writePin(CS_II2_PIN,1);
+    GPIO_setDirectionMode(CS_II2_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(CS_II2_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(CS_II2_PIN_CONFIG);
 
-        //SDFM clk source
-        GPIO_setDirectionMode(SDFM_CLK_HRPWM_PIN,GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(SDFM_CLK_HRPWM_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPadConfig(SDFM_CLK_HRPWM_PIN, GPIO_PIN_TYPE_STD); // disable pull up
-        GPIO_setPinConfig(SDFM_CLK_HRPWM_PIN_CONFIG);
+    //SDFM clk source
+    GPIO_setDirectionMode(SDFM_CLK_HRPWM_PIN,GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(SDFM_CLK_HRPWM_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPadConfig(SDFM_CLK_HRPWM_PIN, GPIO_PIN_TYPE_STD); // disable pull up
+    GPIO_setPinConfig(SDFM_CLK_HRPWM_PIN_CONFIG);
 
-        // Setup GPIO for SD
-        GPIO_setPadConfig(SDFM_D_VV1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_VV1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_VV1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_VV1_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_VV1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_VV1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_VV1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_VV1_PIN_CONFIG);
+    // Setup GPIO for SD
+    GPIO_setPadConfig(SDFM_D_VV1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_VV1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_VV1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_VV1_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_VV1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_VV1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_VV1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_VV1_PIN_CONFIG);
 
-        GPIO_setPadConfig(SDFM_D_VI1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_VI1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_VI1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_VI1_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_VI1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_VI1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_VI1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_VI1_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_D_VI1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_VI1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_VI1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_VI1_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_VI1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_VI1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_VI1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_VI1_PIN_CONFIG);
 
-        GPIO_setPadConfig(SDFM_D_IV1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_IV1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_IV1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_IV1_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_IV1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_IV1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_IV1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_IV1_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_D_IV1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_IV1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_IV1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_IV1_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_IV1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_IV1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_IV1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_IV1_PIN_CONFIG);
 
-        GPIO_setPadConfig(SDFM_D_II1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_II1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_II1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_II1_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_II1_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_II1_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_II1_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_II1_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_D_II1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_II1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_II1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_II1_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_II1_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_II1_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_II1_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_II1_PIN_CONFIG);
 
 
-        GPIO_setPadConfig(SDFM_D_VV2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_VV2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_VV2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_VV2_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_VV2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_VV2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_VV2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_VV2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_D_VV2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_VV2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_VV2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_VV2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_VV2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_VV2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_VV2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_VV2_PIN_CONFIG);
 
-        GPIO_setPadConfig(SDFM_D_VI2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_VI2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_VI2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_VI2_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_VI2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_VI2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_VI2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_VI2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_D_VI2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_VI2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_VI2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_VI2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_VI2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_VI2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_VI2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_VI2_PIN_CONFIG);
 
-        GPIO_setPadConfig(SDFM_D_IV2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_IV2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_IV2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_IV2_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_IV2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_IV2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_IV2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_IV2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_D_IV2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_IV2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_IV2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_IV2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_IV2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_IV2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_IV2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_IV2_PIN_CONFIG);
 
-        GPIO_setPadConfig(SDFM_D_II2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_D_II2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_D_II2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_D_II2_PIN_CONFIG);
-        GPIO_setPadConfig(SDFM_C_II2_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setQualificationMode(SDFM_C_II2_PIN,GPIO_QUAL_SYNC);
-        GPIO_setDirectionMode(SDFM_C_II2_PIN, GPIO_DIR_MODE_IN);
-        GPIO_setPinConfig(SDFM_C_II2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_D_II2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_D_II2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_D_II2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_D_II2_PIN_CONFIG);
+    GPIO_setPadConfig(SDFM_C_II2_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setQualificationMode(SDFM_C_II2_PIN,GPIO_QUAL_SYNC);
+    GPIO_setDirectionMode(SDFM_C_II2_PIN, GPIO_DIR_MODE_IN);
+    GPIO_setPinConfig(SDFM_C_II2_PIN_CONFIG);
 
-        //HVBUS METER init
-        GPIO_setMasterCore(BRIDGE_V_EN_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(BRIDGE_V_EN_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(BRIDGE_V_EN_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(BRIDGE_V_EN_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(BRIDGE_V_EN_PIN_CONFIG);
+    //HVBUS METER init
+    GPIO_setMasterCore(BRIDGE_V_EN_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(BRIDGE_V_EN_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(BRIDGE_V_EN_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(BRIDGE_V_EN_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(BRIDGE_V_EN_PIN_CONFIG);
 
-        GPIO_setMasterCore(BRIDGE_I_EN_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(BRIDGE_I_EN_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(BRIDGE_I_EN_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(BRIDGE_I_EN_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(BRIDGE_I_EN_PIN_CONFIG);
+    GPIO_setMasterCore(BRIDGE_I_EN_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(BRIDGE_I_EN_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(BRIDGE_I_EN_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(BRIDGE_I_EN_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(BRIDGE_I_EN_PIN_CONFIG);
 
-        GPIO_writePin(HVBUS_MEAS_ENA_PIN, 1); //( 0: ON | 1: OFF )
-        GPIO_setMasterCore(HVBUS_MEAS_ENA_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(HVBUS_MEAS_ENA_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(HVBUS_MEAS_ENA_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(HVBUS_MEAS_ENA_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(HVBUS_MEAS_ENA_PIN_CONFIG);
+    GPIO_writePin(HVBUS_MEAS_ENA_PIN, 1); //( 0: ON | 1: OFF )
+    GPIO_setMasterCore(HVBUS_MEAS_ENA_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(HVBUS_MEAS_ENA_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(HVBUS_MEAS_ENA_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(HVBUS_MEAS_ENA_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(HVBUS_MEAS_ENA_PIN_CONFIG);
 
-        GPIO_writePin(HVBUS_CTRL_PIN, 0);
-        GPIO_setMasterCore(HVBUS_CTRL_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(HVBUS_CTRL_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(HVBUS_CTRL_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(HVBUS_CTRL_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(HVBUS_CTRL_PIN_CONFIG);
+    GPIO_writePin(HVBUS_CTRL_PIN, 0);
+    GPIO_setMasterCore(HVBUS_CTRL_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(HVBUS_CTRL_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(HVBUS_CTRL_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(HVBUS_CTRL_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(HVBUS_CTRL_PIN_CONFIG);
 
-        GPIO_writePin(HVBUS_CTRL_OWNER_PIN, 0);
-        GPIO_setMasterCore(HVBUS_CTRL_OWNER_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(HVBUS_CTRL_OWNER_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(HVBUS_CTRL_OWNER_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(HVBUS_CTRL_OWNER_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(HVBUS_CTRL_OWNER_PIN_CONFIG);
+    GPIO_writePin(HVBUS_CTRL_OWNER_PIN, 0);
+    GPIO_setMasterCore(HVBUS_CTRL_OWNER_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(HVBUS_CTRL_OWNER_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(HVBUS_CTRL_OWNER_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(HVBUS_CTRL_OWNER_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(HVBUS_CTRL_OWNER_PIN_CONFIG);
 
-        GPIO_writePin(HVBUS_IFAULT_P_PIN, 0);
-        GPIO_setMasterCore(HVBUS_IFAULT_P_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(HVBUS_IFAULT_P_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(HVBUS_IFAULT_P_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(HVBUS_IFAULT_P_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(HVBUS_IFAULT_P_PIN_CONFIG);
+    GPIO_writePin(HVBUS_IFAULT_P_PIN, 0);
+    GPIO_setMasterCore(HVBUS_IFAULT_P_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(HVBUS_IFAULT_P_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(HVBUS_IFAULT_P_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(HVBUS_IFAULT_P_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(HVBUS_IFAULT_P_PIN_CONFIG);
 
-        GPIO_writePin(HVBUS_IFAULT_N_PIN, 0);
-        GPIO_setMasterCore(HVBUS_IFAULT_N_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(HVBUS_IFAULT_N_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(HVBUS_IFAULT_N_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(HVBUS_IFAULT_N_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(HVBUS_IFAULT_N_PIN_CONFIG);
+    GPIO_writePin(HVBUS_IFAULT_N_PIN, 0);
+    GPIO_setMasterCore(HVBUS_IFAULT_N_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(HVBUS_IFAULT_N_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(HVBUS_IFAULT_N_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(HVBUS_IFAULT_N_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(HVBUS_IFAULT_N_PIN_CONFIG);
 
-        GPIO_writePin(HVBUS_ZC_P_PIN, 0);
-        GPIO_setMasterCore(HVBUS_ZC_P_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(HVBUS_ZC_P_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(HVBUS_ZC_P_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(HVBUS_ZC_P_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(HVBUS_ZC_P_PIN_CONFIG);
+    GPIO_writePin(HVBUS_ZC_P_PIN, 0);
+    GPIO_setMasterCore(HVBUS_ZC_P_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(HVBUS_ZC_P_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(HVBUS_ZC_P_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(HVBUS_ZC_P_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(HVBUS_ZC_P_PIN_CONFIG);
 
-        GPIO_writePin(HVBUS_ZC_N_PIN, 0);
-        GPIO_setMasterCore(HVBUS_ZC_N_PIN, GPIO_CORE_CPU1);
-        GPIO_setPadConfig(HVBUS_ZC_N_PIN, GPIO_PIN_TYPE_STD);
-        GPIO_setDirectionMode(HVBUS_ZC_N_PIN, GPIO_DIR_MODE_OUT);
-        GPIO_setQualificationMode(HVBUS_ZC_N_PIN,GPIO_QUAL_ASYNC);
-        GPIO_setPinConfig(HVBUS_ZC_N_PIN_CONFIG);
+    GPIO_writePin(HVBUS_ZC_N_PIN, 0);
+    GPIO_setMasterCore(HVBUS_ZC_N_PIN, GPIO_CORE_CPU1);
+    GPIO_setPadConfig(HVBUS_ZC_N_PIN, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(HVBUS_ZC_N_PIN, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(HVBUS_ZC_N_PIN,GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(HVBUS_ZC_N_PIN_CONFIG);
 
 }
 
@@ -1138,8 +1273,8 @@ interrupt void cla1Isr1 ()
     if(app.generation.sync_flag){
         app.generation.sync_flag = false;
         loop = 0;
-        app.generation.current.ref.waveform_index = 0;
-        app.generation.voltage.ref.waveform_index = 0;
+        app.generation.current.wg->ref.waveform_index = 0;
+        app.generation.voltage.wg->ref.waveform_index = 0;
     }
 
     app.measures.primary.voltage.voltage[loop] = cla_vv1.data;
@@ -1151,10 +1286,10 @@ interrupt void cla1Isr1 ()
     app.measures.secondary.current.voltage[loop] = cla_iv2.data;
     app.measures.secondary.current.current[loop] = cla_ii2.data;
 
-    rki =  reference_routine(&app.generation.current.ref);
-    rki = rki*app.generation.current.config.scale;
-    rkv =  reference_routine(&app.generation.voltage.ref);
-    rkv = rkv*app.generation.voltage.config.scale;
+    rki =  reference_routine(&app.generation.current.wg->ref);
+    rki = rki*app.generation.current.wg->config.scale;
+    rkv =  reference_routine(&app.generation.voltage.wg->ref);
+    rkv = rkv*app.generation.voltage.wg->config.scale;
 
 
     //    if(!app.generation.current.command.enable)
@@ -1162,64 +1297,64 @@ interrupt void cla1Isr1 ()
     //    if(!app.generation.voltage.command.enable)
     //        rkv = 0.0f;
 
-    if(app.generation.current.controller == MODE_REPETITIVE_FROM_CLA)
+    if(app.generation.current.wg->controller == MODE_REPETITIVE_FROM_CLA)
     {
         cla_current_setpoint = rki;
-        _update_pwm_current(cla_current_controller.out);
-        app.generation.current.trigger.from_control_loop = true;
+        update_pwm_current(cla_current_controller.out);
+        app.generation.current.wg->trigger.from_control_loop = true;
     }
-    else if(app.generation.current.controller == MODE_OFF)
+    else if(app.generation.current.wg->controller == MODE_OFF)
     {
         cla_current_controller.counter = 0;
         cla_current_controller.init_flag = false;
-        app.generation.current.controller = MODE_NONE;
-        _update_pwm_current(0.0f);
+        app.generation.current.wg->controller = MODE_NONE;
+        update_pwm_current(0.0f);
     }
-    else if(app.generation.current.controller == MODE_FEEDFORWARD)
+    else if(app.generation.current.wg->controller == MODE_FEEDFORWARD)
     {
-        _update_pwm_current(rki);
-        app.generation.current.trigger.from_control_loop = true;
+        update_pwm_current(rki);
+        app.generation.current.wg->trigger.from_control_loop = true;
     }
-    else if(app.generation.current.controller == MODE_REPETITIVE)
+    else if(app.generation.current.wg->controller == MODE_REPETITIVE)
     {
         // controller_out = repetitive_routine(&app.generation.current.control, rki, cla_igen_current.data);
-        _update_pwm_current(controller_out);
-        app.generation.current.trigger.from_control_loop = true;
+        update_pwm_current(controller_out);
+        app.generation.current.wg->trigger.from_control_loop = true;
     }
-    else if(app.generation.current.controller == MODE_NONE)
+    else if(app.generation.current.wg->controller == MODE_NONE)
     {
-        _update_pwm_current(0.0f);
+        update_pwm_current(0.0f);
     }
 
 
-    if(app.generation.voltage.controller == MODE_REPETITIVE_FROM_CLA)
+    if(app.generation.voltage.wg->controller == MODE_REPETITIVE_FROM_CLA)
     {
         cla_voltage_setpoint = rkv;
-        _update_pwm_voltage(cla_voltage_controller.out);
-        app.generation.voltage.trigger.from_control_loop = true;
+        update_pwm_voltage(cla_voltage_controller.out);
+        app.generation.voltage.wg->trigger.from_control_loop = true;
     }
-    else if(app.generation.voltage.controller == MODE_OFF)
+    else if(app.generation.voltage.wg->controller == MODE_OFF)
     {
         cla_voltage_controller.counter = 0;
         cla_voltage_controller.init_flag = false;
-        app.generation.voltage.controller = MODE_NONE;
-        _update_pwm_voltage(0.0f);
+        app.generation.voltage.wg->controller = MODE_NONE;
+        update_pwm_voltage(0.0f);
     }
-    else if(app.generation.voltage.controller == MODE_FEEDFORWARD)
+    else if(app.generation.voltage.wg->controller == MODE_FEEDFORWARD)
     {
-        _update_pwm_voltage(rkv);
-        app.generation.voltage.trigger.from_control_loop = true;
+        update_pwm_voltage(rkv);
+        app.generation.voltage.wg->trigger.from_control_loop = true;
     }
-    else if(app.generation.voltage.controller == MODE_REPETITIVE)
+    else if(app.generation.voltage.wg->controller == MODE_REPETITIVE)
     {
         cla_voltage_setpoint = rkv;
         //controller_out = repetitive_routine(&app.generation.voltage.control, rkv, cla_v1_voltage.data);
-        _update_pwm_voltage(controller_out);
-        app.generation.voltage.trigger.from_control_loop = true;
+        update_pwm_voltage(controller_out);
+        app.generation.voltage.wg->trigger.from_control_loop = true;
     }
-    else if(app.generation.voltage.controller == MODE_NONE)
+    else if(app.generation.voltage.wg->controller == MODE_NONE)
     {
-        _update_pwm_voltage(0.0f);
+        update_pwm_voltage(0.0f);
     }
 
 

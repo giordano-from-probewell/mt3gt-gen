@@ -19,9 +19,9 @@
 #include "ada4254.h"
 #include "buzzer.h"
 
-#include "reference_generation.h"
-#include "generation_sm.h"
+#include "generation.h"
 #include "protection.h"
+#include "reference_generation.h"
 
 
 /* Generic All Devices Defines */
@@ -367,87 +367,10 @@ typedef struct feedback_st
 
 } feedback_t;
 
-typedef enum mode_en
-{
-    MODE_OFF                        = 0,
-    MODE_NONE                       = 1,
-    MODE_START                      = 2,
-    MODE_FEEDFORWARD                = 3,
-    MODE_SFRA                       = 4,
-    MODE_REPETITIVE                 = 7,
-    MODE_REPETITIVE_FROM_CLA        = 8,
-} mode_t;
-
-typedef enum generation_sm_type_en
-{
-    GENERATING_VOLTAGE     = 'V',
-    GENERATING_CURRENT     = 'I'
-
-} generation_sm_type_t;
 
 
-typedef struct waveform_generation_st
-{
-    my_time_t scheduling;
-    reference_generation_t ref;
-    struct  {
-
-        generic_states_t state;
-        generic_status_t status;
-    } sm;
-
-    gen_runtime_t gen;
-
-    struct  {
-        bool from_control_loop;
-        bool start_generation;
-    } trigger;
-
-    struct  {
-        generation_sm_type_t gen_type;
-        float32_t scale;
-        float32_t scale_requested;
-    } config;
-
-    struct  {
-        bool enable;
-        bool enable_from_cli;
-        bool disable_from_cli;
-        bool enable_from_comm;
-        bool disable_from_comm;
-        bool disable_from_protection_by_control_error;
-        bool disable_from_protection_by_saturation;
-    } command;
-
-    struct  {
-        bool ready_to_generate;
-        bool generating;
-    } status;
-
-    mode_t controller;
-    //rep_controller_t control;
-    protection_error_monitor_t protection;
-
-} waveform_generation_t;
 
 
-typedef struct generation_st
-{
-    struct
-    {
-        uint32_t inverter_pwm_steps;
-        uint32_t deadband;
-        uint32_t generation_freq;
-    }config;
-
-    waveform_generation_t voltage;
-    waveform_generation_t current;
-
-    bool sync_flag;
-    uint16_t mep_status;
-    bool zero_trigger;
-
-} generation_t;
 
 typedef struct analog_input_st
 {

@@ -4,7 +4,6 @@
 #include "types.h"
 #include "F28x_Project.h"
 #include "string.h"
-#include "sci_io.h"
 #include "sci.h"
 #include "application.h"
 #include "generic_definitions.h"

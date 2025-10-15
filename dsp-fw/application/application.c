@@ -143,10 +143,10 @@ generic_status_t app_init(application_t * app)
         app->sm_cpu2 = &sm_cpu2;
         /*ret = */app_init_cpu1(app);
 
-        app->generation.voltage.ref.waveform1 = refVoltage1;
-        app->generation.voltage.ref.waveform2 = refVoltage2;
-        app->generation.current.ref.waveform1 = refCurrent1;
-        app->generation.current.ref.waveform2 = refCurrent2;
+        app->generation.voltage.wg->ref.waveform1 = refVoltage1;
+        app->generation.voltage.wg->ref.waveform2 = refVoltage2;
+        app->generation.current.wg->ref.waveform1 = refCurrent1;
+        app->generation.current.wg->ref.waveform2 = refCurrent2;
 
         // Synchronize both the cores
         ipc_sync_cpu1();

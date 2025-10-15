@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "my_time.h"
 #include "hw_ints.h"
 #include "hw_types.h"
 #include "generic_definitions.h"
