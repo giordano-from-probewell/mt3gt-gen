@@ -26,9 +26,9 @@ static volatile uint8_t s_cpu2_next_seq = 1u; // CPU2 -> CPU1
 static inline void mem_barrier(void) { __asm(" RPT #7 || NOP"); }
 
 /* ---------------- common ring helpers ---------------- */
-static inline void ring_reset(ipc_ring_t* r) { r->head = r->tail = 0u; }
+static inline void ring_reset(volatile ipc_ring_t* r) { r->head = r->tail = 0u; }
 
-static bool ring_push(ipc_ring_t* r, const ipc_pkt_t* p)
+static bool ring_push(volatile ipc_ring_t* r, const ipc_pkt_t* p)
 {
     uint32_t h = r->head, t = r->tail;
     if ((h - t) >= IPC_RING_P2) return false;  /* full */
@@ -38,7 +38,7 @@ static bool ring_push(ipc_ring_t* r, const ipc_pkt_t* p)
     return true;
 }
 
-static bool ring_pop(ipc_ring_t* r, ipc_pkt_t* out)
+static bool ring_pop(volatile ipc_ring_t* r, ipc_pkt_t* out)
 {
     uint32_t t = r->tail, h = r->head;
     if (t == h) return false;

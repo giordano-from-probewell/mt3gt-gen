@@ -4,8 +4,8 @@
 #include <math.h>
 
 static inline float32_t clamp01(float32_t x) {
-    if (x < 0.0f) return 0.0f;
-    if (x > 1.0f) return 1.0f;
+//    if (x < 0.0f) return 0.0f;
+//    if (x > 1.0f) return 1.0f;
     return x;
 }
 
@@ -54,9 +54,16 @@ void gen_sm_request_disable(gen_sm_ch_t *ch)
 void gen_sm_request_scale(gen_sm_ch_t *ch, float32_t new_scale)
 {
     ch->wg->config.scale_requested = clamp01(new_scale);
-    if (ch->state == GEN_SM_RUN) {
-        if (ch->wg->config.scale_requested > ch->scale_cur) ch->state = GEN_SM_RAMP_UP;
-        else if (ch->wg->config.scale_requested < ch->scale_cur) ch->state = GEN_SM_RAMP_DOWN;
+    
+    // Update state based on new scale request, regardless of current state
+    if (ch->state == GEN_SM_RUN || ch->state == GEN_SM_RAMP_UP || ch->state == GEN_SM_RAMP_DOWN) {
+        if (ch->wg->config.scale_requested > ch->scale_cur) {
+            ch->state = GEN_SM_RAMP_UP;
+        } else if (ch->wg->config.scale_requested < ch->scale_cur) {
+            ch->state = GEN_SM_RAMP_DOWN;
+        } else {
+            ch->state = GEN_SM_RUN; // Target reached
+        }
     }
 }
 
@@ -108,7 +115,12 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
 
     case GEN_SM_RAMP_UP:
         step_ramp_to(ch, ch->wg->config.scale_requested);
-        if (ch->scale_cur >= ch->wg->config.scale_requested) ch->state = GEN_SM_RUN;
+        if (ch->scale_cur >= ch->wg->config.scale_requested) {
+            ch->state = GEN_SM_RUN;
+        } else if (ch->wg->config.scale_requested < ch->scale_cur) {
+            // Scale request changed direction during ramp
+            ch->state = GEN_SM_RAMP_DOWN;
+        }
         break;
 
     case GEN_SM_RUN:
@@ -119,8 +131,17 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
         break;
 
     case GEN_SM_RAMP_DOWN:
-        step_ramp_to(ch, 0.f);
-        if (ch->scale_cur <= 0.f) ch->state = GEN_SM_DISARMING;
+        step_ramp_to(ch, ch->wg->config.scale_requested);
+        if (ch->scale_cur <= ch->wg->config.scale_requested) {
+            if (ch->wg->config.scale_requested == 0.f) {
+                ch->state = GEN_SM_DISARMING;
+            } else {
+                ch->state = GEN_SM_RUN;
+            }
+        } else if (ch->wg->config.scale_requested > ch->scale_cur) {
+            // Scale request changed direction during ramp
+            ch->state = GEN_SM_RAMP_UP;
+        }
         break;
 
     case GEN_SM_DISARMING:

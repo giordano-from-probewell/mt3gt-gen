@@ -473,6 +473,13 @@ typedef struct application_st
 extern const fw_data_t fw_info;
 extern application_t app;
 
+
+extern float32_t refVoltage1[REF_GEN_MAX_SIZE];
+extern float32_t refVoltage2[REF_GEN_MAX_SIZE];
+extern float32_t refCurrent1[REF_GEN_MAX_SIZE];
+extern float32_t refCurrent2[REF_GEN_MAX_SIZE];
+
+
 #ifdef CPU1
 
 extern bool flag_new_range;

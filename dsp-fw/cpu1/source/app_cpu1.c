@@ -70,6 +70,20 @@ volatile uint32_t fetchAddress;
 bool flag_zc = false; //zero crossing mark
 int c1,p1,l1;
 
+//
+// Array of pointers to EPwm register structures:
+// *ePWM[0] is defined as dummy value not used in the example
+//
+volatile struct EPWM_REGS *ePWM[PWM_CH] =
+             {  &EPwm1Regs, &EPwm1Regs, &EPwm2Regs, &EPwm3Regs, &EPwm4Regs,
+                &EPwm5Regs, &EPwm6Regs, &EPwm7Regs, &EPwm8Regs};
+
+int MEP_ScaleFactor; // Global variable used by the SFO library
+                     // Result can be used for all HRPWM channels
+                     // This variable is also copied to HRMSTEP
+                     // register by SFO() function.
+
+
 int voltage_event = 0;
 int current_event = 0;
 int voltage_overpower_counter = 0;
@@ -140,12 +154,44 @@ static void current_setpoint_write(float val) {
     cla_current_setpoint = val;
 }
 
+// error - Halt debugger when called
+void error (void)
+{
+    ESTOP0;         // Stop here and handle error
+}
+
+
 void app_cpu1_init_generation(application_t *app)
 {
     gen_sm_hw_cb_t vhw = { v_pwm_clear_trip, v_pwm_force_trip, v_cla_on, v_cla_off };
     gen_sm_hw_cb_t ihw = { i_pwm_clear_trip, i_pwm_force_trip, i_cla_on, i_cla_off };
-    gen_sm_init(&app->generation.voltage, &app->voltage_wg, &vhw, 0.01f, 5);
-    gen_sm_init(&app->generation.current, &app->current_wg, &ihw, 0.01f, 5);
+    gen_sm_init(&app->generation.voltage, &app->voltage_wg, &vhw, 50.0f, 20);
+    gen_sm_init(&app->generation.current, &app->current_wg, &ihw, 50.0f, 20);
+
+    reference_init(&app->generation.voltage.wg->ref);
+    reference_init(&app->generation.current.wg->ref);
+    app->generation.voltage.wg->ref.waveform1 = refVoltage1;
+    app->generation.voltage.wg->ref.waveform2 = refVoltage2;
+    app->generation.current.wg->ref.waveform1 = refCurrent1;
+    app->generation.current.wg->ref.waveform2 = refCurrent2;
+
+    app->generation.current.wg->controller = MODE_FEEDFORWARD;
+    app->generation.voltage.wg->controller = MODE_FEEDFORWARD;
+
+    //PWM max = 90% PWM min = 10%
+    init_protection(&app->generation.voltage.wg->protection,
+                    80, 200, 50.0, 10.0,
+                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+                    ((app->generation.config.inverter_pwm_steps)*10)/100
+    );
+
+    init_protection(&app->generation.current.wg->protection,
+                    60, 600, 90.0, 0.8,
+                    ((app->generation.config.inverter_pwm_steps)*90)/100,
+                    ((app->generation.config.inverter_pwm_steps)*10)/100
+    );
+
+
 }
 
 void app_cpu1_generation_tick(my_time_t now_ms)
@@ -243,9 +289,7 @@ static void cpu1_start  (application_t *app, my_time_t now)
     memcpy(app->id.data.full.last_verfication_date, "20260101", 8);
 
 
-    Cla1ForceTask8andWait();
 
-    WAITSTEP;
 
     GPIO_writePin(FB_EN_PIN, 1);
     _cla1_link_from_sdfm();
@@ -253,6 +297,7 @@ static void cpu1_start  (application_t *app, my_time_t now)
     _cla1_memory_config();
     _cla1_interruption_config();
     Cla1ForceTask8andWait();
+    WAITSTEP;
 
     _ampops_init(app);
 
@@ -271,8 +316,24 @@ static void cpu1_start  (application_t *app, my_time_t now)
     GPIO_writePin(BRIDGE_V_EN_PIN, 1);
     GPIO_writePin(BRIDGE_I_EN_PIN, 1);
 
+    //DSP control HV BUS
+    GPIO_writePin(HVBUS_CTRL_OWNER_PIN, 0);
+    //HV BUS on
+    GPIO_writePin(HVBUS_CTRL_PIN, 1);
 
-
+    //
+    // Calling SFO() updates the HRMSTEP register with calibrated MEP_ScaleFactor.
+    // HRMSTEP must be populated with a scale factor value prior to enabling
+    // high resolution period control.
+    //
+       while(app->generation.mep_status == SFO_INCOMPLETE)
+       {
+           app->generation.mep_status = SFO();
+            if(app->generation.mep_status == SFO_ERROR)
+            {
+                error();   // SFO function returns 2 if an error occurs & # of MEP
+            }              // steps/coarse step exceeds maximum of 255.
+       }
 
 
     //    gen_sm_turning_on();
@@ -288,8 +349,7 @@ static void cpu1_start  (application_t *app, my_time_t now)
 
 
 
-    reference_init(&app->generation.voltage.wg->ref);
-    reference_init(&app->generation.current.wg->ref);
+
 
     //    //PWM max = 90% PWM min = 10%
     //    init_protection(&app->generation.voltage.protection,
@@ -352,10 +412,12 @@ static void cpu1_start  (application_t *app, my_time_t now)
 
     app->generation.sync_flag = false;
 
+    app_cpu1_init_generation(app);
+
 
     app_sm_set(&app->sm_cpu1, APP_STATE_RUNNING, now);
 
-    app_cpu1_init_generation(app);
+
 
 }
 
@@ -418,7 +480,21 @@ static void cpu1_running(application_t *app, my_time_t now)
         flag_gen3=false;
     }
 
-
+    //TODO: Attention: We had problems, the HRMSTEP calculated here is only one for all PWM`s Channles, but to have a perfect
+    // waveform we need different HRMSTEPs. How to have a different HRMSTEP for each channel? We need more tests
+    
+    // Execute SFO() every 100ms
+    static my_time_t last_sfo_time = 0;
+    if ((now - last_sfo_time) >= 100)  // 100ms interval
+    {
+        app->generation.mep_status = SFO();
+        if (app->generation.mep_status == SFO_ERROR)
+        {
+            error();   // SFO function returns 2 if an error occurs & # of MEP
+                       // steps/coarse step exceeds maximum of 255.
+        }
+        last_sfo_time = now;
+    }
 
 }
 
@@ -486,9 +562,16 @@ void _app_gpio_init(void)
     GPIO_setPinConfig(USR_GPIO2_PIN_CONFIG);
     GPIO_setMasterCore(USR_GPIO2, GPIO_CORE_CPU1_CLA1);
 
+    GPIO_setPadConfig(USR_GPIO3, GPIO_PIN_TYPE_STD);
+    GPIO_setDirectionMode(USR_GPIO3, GPIO_DIR_MODE_OUT);
+    GPIO_setQualificationMode(USR_GPIO3, GPIO_QUAL_ASYNC);
+    GPIO_setPinConfig(USR_GPIO3_PIN_CONFIG);
+    GPIO_setMasterCore(USR_GPIO3, GPIO_CORE_CPU1);
+
     GPIO_WritePin(USR_GPIO0, 0);
     GPIO_WritePin(USR_GPIO1, 0);
     GPIO_WritePin(USR_GPIO2, 0);
+    GPIO_WritePin(USR_GPIO3, 0);
 
 
     GPIO_setPadConfig(MY_ADDR_PIN0, GPIO_PIN_TYPE_STD);
@@ -1272,7 +1355,7 @@ interrupt void cla1Isr1 ()
     static float32_t ictrlerror = 0.0f;
     static float32_t vctrlerror = 0.0f;
 
-    GPIO_writePin(USR_GPIO3, 1);
+    //GPIO_writePin(USR_GPIO3, 1);
     if(app.generation.sync_flag){
         app.generation.sync_flag = false;
         loop = 0;
@@ -1293,6 +1376,10 @@ interrupt void cla1Isr1 ()
     rki = rki*app.generation.current.wg->config.scale;
     rkv =  reference_routine(&app.generation.voltage.wg->ref);
     rkv = rkv*app.generation.voltage.wg->config.scale;
+    if(rkv>=0.0)
+        GPIO_writePin(USR_GPIO3, 1);
+    else
+        GPIO_writePin(USR_GPIO3, 0);
 
 
     //    if(!app.generation.current.command.enable)
@@ -1576,7 +1663,7 @@ interrupt void cla1Isr1 ()
 
     }
 
-    GPIO_writePin(USR_GPIO3, 0);
+    //GPIO_writePin(USR_GPIO3, 0);
     // Acknowledge the end-of-task interrupt for task 1
 
     Interrupt_clearACKGroup(INTERRUPT_ACK_GROUP11);

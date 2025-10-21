@@ -43,8 +43,32 @@ static const command_comm_map_t _cmd_map[] =
 {
  { .handler = cmd_ping,                            .number = COMMAND_PING                           , },
  { .handler = cmd_identify,                        .number = COMMAND_IDENTIFY                       , },
+ { .handler = cmd_reset_voltage_waveform,          .number = COMMAND_RESET_VOLTAGE_WAVEFORM         , },
+ { .handler = cmd_reset_current_waveform,          .number = COMMAND_RESET_CURRENT_WAVEFORM         , },
+ { .handler = cmd_set_voltage_waveform,            .number = COMMAND_SET_VOLTAGE_WAVEFORM           , },
+ { .handler = cmd_get_voltage_waveform,            .number = COMMAND_GET_VOLTAGE_WAVEFORM           , },
+ { .handler = cmd_set_current_waveform,            .number = COMMAND_SET_CURRENT_WAVEFORM           , },
+ { .handler = cmd_get_current_waveform,            .number = COMMAND_GET_CURRENT_WAVEFORM           , },
+ { .handler = cmd_stop_generation,                 .number = COMMAND_STOP_GENERATION                , },
+ { .handler = cmd_start_generation,                .number = COMMAND_START_GENERATION               , },
+ { .handler = cmd_start_voltage_generation,        .number = COMMAND_START_VOLTAGE_GENERATION       , },
+ { .handler = cmd_stop_voltage_generation,         .number = COMMAND_STOP_VOLTAGE_GENERATION        , },
+ { .handler = cmd_start_current_generation,        .number = COMMAND_START_CURRENT_GENERATION       , },
+ { .handler = cmd_stop_current_generation,         .number = COMMAND_STOP_CURRENT_GENERATION        , },
+ { .handler = cmd_set_scale_current,               .number = COMMAND_SET_CURRENT_SCALE              , },
+ { .handler = cmd_get_scale_current,               .number = COMMAND_GET_CURRENT_SCALE              , },
+ { .handler = cmd_set_scale_voltage,               .number = COMMAND_SET_VOLTAGE_SCALE              , },
+ { .handler = cmd_get_scale_voltage,               .number = COMMAND_GET_VOLTAGE_SCALE              , },
+ { .handler = cmd_set_frequency,                   .number = COMMAND_SET_FREQUENCY                  , },
+ { .handler = cmd_get_frequency,                   .number = COMMAND_GET_FREQUENCY                  , },
+ { .handler = cmd_get_status,                      .number = COMMAND_GET_STATUS                     , },
+ { .handler = cmd_get_error,                       .number = COMMAND_GET_ERROR                      , },
+ { .handler = cmd_get_measures,                    .number = COMMAND_GET_MEASURES                   , },
+ { .handler = cmd_get_calibration,                 .number = COMMAND_GET_CALIBRATION                , },
+ { .handler = cmd_set_calibration,                 .number = COMMAND_SET_CALIBRATION                , },
+ { .handler = cmd_gpio1_clear,                     .number = COMMAND_GPIO1_CLEAR                    , },
+ { .handler = cmd_gpio1_set,                       .number = COMMAND_GPIO1_SET                      , },
 };
-
 
 
 
@@ -99,16 +123,16 @@ void comm_processing(const my_time_t time_actual)
         commControl.state = state_reset;
     }
 
-//    //if you want to discover the serial port...
-//    {
-//        static my_time_t t = 0;
-//
-//        if(t<time_actual){
-//            t = time_actual+2000;
-//
-//            SCI_writeCharBlockingNonFIFO(COMMS_SCI_BASE, '*');
-//        }
-//    }
+    //    //if you want to discover the serial port...
+    //    {
+    //        static my_time_t t = 0;
+    //
+    //        if(t<time_actual){
+    //            t = time_actual+2000;
+    //
+    //            SCI_writeCharBlockingNonFIFO(COMMS_SCI_BASE, '*');
+    //        }
+    //    }
 
     //SCI_writeCharBlockingNonFIFO(COMMS_SCI_BASE, 's');
 

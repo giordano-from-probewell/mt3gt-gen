@@ -291,13 +291,13 @@ void setupEPWMActiveHighComplementary(uint32_t base, uint32_t deadband)
 
 
 
-void gen_off(void)
+void hv_bus_off(void)
 {
     //HV_CTRL - on
     GPIO_writePin(HVBUS_CTRL_PIN, 0);
 }
 
-void gen_on(void)
+void hv_bus_on(void)
 {
     GPIO_writePin(HVBUS_CTRL_PIN, 1);
 }
@@ -319,16 +319,16 @@ void update_pwm_voltage(float32_t duty)
 
     voltage_inv_duty = (app.generation.config.inverter_pwm_steps/2) + duty;
 
-//    if(voltage_inv_duty > app.generation.voltage.protection.config.pwm_max_value )
-//    {
-//        voltage_inv_duty = app.generation.voltage.protection.config.pwm_max_value;
-//        app.generation.voltage.command.disable_from_protection_by_saturation = true;
-//    }
-//    else if(voltage_inv_duty < app.generation.voltage.protection.config.pwm_min_value)
-//    {
-//        voltage_inv_duty = app.generation.voltage.protection.config.pwm_min_value;
-//        app.generation.voltage.command.disable_from_protection_by_saturation = true;
-//    }
+    if(voltage_inv_duty > app.generation.voltage.wg->protection.config.pwm_max_value )
+    {
+        voltage_inv_duty = app.generation.voltage.wg->protection.config.pwm_max_value;
+        app.generation.voltage.wg->command.disable_from_protection_by_saturation = true;
+    }
+    else if(voltage_inv_duty < app.generation.voltage.wg->protection.config.pwm_min_value)
+    {
+        voltage_inv_duty = app.generation.voltage.wg->protection.config.pwm_min_value;
+        app.generation.voltage.wg->command.disable_from_protection_by_saturation = true;
+    }
 
     if(duty>0)
     {
@@ -344,15 +344,15 @@ void update_pwm_voltage(float32_t duty)
         HRPWM_setCounterCompareValue(INV_PWM2_VOLTAGE, HRPWM_COUNTER_COMPARE_A, voltage_inv_duty + voltage_pwm_dc2);
         HRPWM_setCounterCompareValue(INV_PWM2_VOLTAGE, HRPWM_COUNTER_COMPARE_B, voltage_inv_duty + voltage_pwm_dc2);
     }
-//
-//    if(duty>app.generation.voltage.protection.data.max_pwm_duty)
-//        app.generation.voltage.protection.data.max_pwm_duty=duty;
-//
-//    if(duty<app.generation.voltage.protection.data.min_pwm_duty)
-//        app.generation.voltage.protection.data.min_pwm_duty=duty;
-//
-//    app.generation.voltage.protection.data.max_pwm_duty = app.generation.voltage.protection.data.max_pwm_duty - 0.001;
-//    app.generation.voltage.protection.data.min_pwm_duty = app.generation.voltage.protection.data.min_pwm_duty + 0.001;
+
+    if(duty>app.generation.voltage.wg->protection.data.max_pwm_duty)
+        app.generation.voltage.wg->protection.data.max_pwm_duty=duty;
+
+    if(duty<app.generation.voltage.wg->protection.data.min_pwm_duty)
+        app.generation.voltage.wg->protection.data.min_pwm_duty=duty;
+
+    app.generation.voltage.wg->protection.data.max_pwm_duty = app.generation.voltage.wg->protection.data.max_pwm_duty - 0.001;
+    app.generation.voltage.wg->protection.data.min_pwm_duty = app.generation.voltage.wg->protection.data.min_pwm_duty + 0.001;
 
 }
 
@@ -365,16 +365,16 @@ void update_pwm_current(float32_t duty)
 
     current_inv_duty = (app.generation.config.inverter_pwm_steps/2) + duty;
 
-//    if(current_inv_duty > app.generation.current.protection.config.pwm_max_value )
-//    {
-//        current_inv_duty = app.generation.current.protection.config.pwm_max_value;
-//        app.generation.current.command.disable_from_protection_by_saturation = true;
-//    }
-//    else if(current_inv_duty < app.generation.current.protection.config.pwm_min_value)
-//    {
-//        current_inv_duty = app.generation.current.protection.config.pwm_min_value;
-//        app.generation.current.command.disable_from_protection_by_saturation = true;
-//    }
+    if(current_inv_duty > app.generation.current.wg->protection.config.pwm_max_value )
+    {
+        current_inv_duty = app.generation.current.wg->protection.config.pwm_max_value;
+        app.generation.current.wg->command.disable_from_protection_by_saturation = true;
+    }
+    else if(current_inv_duty < app.generation.current.wg->protection.config.pwm_min_value)
+    {
+        current_inv_duty = app.generation.current.wg->protection.config.pwm_min_value;
+        app.generation.current.wg->command.disable_from_protection_by_saturation = true;
+    }
 
     if(duty>0)
     {
@@ -391,14 +391,14 @@ void update_pwm_current(float32_t duty)
         HRPWM_setCounterCompareValue(INV_PWM2_CURRENT, HRPWM_COUNTER_COMPARE_B, current_inv_duty + current_pwm_dc2);
     }
 
-//    if(duty>app.generation.current.protection.data.max_pwm_duty)
-//        app.generation.current.protection.data.max_pwm_duty=duty;
-//
-//    if(duty<app.generation.current.protection.data.min_pwm_duty)
-//        app.generation.current.protection.data.min_pwm_duty=duty;
-//
-//    app.generation.current.protection.data.max_pwm_duty = app.generation.current.protection.data.max_pwm_duty - 0.001;
-//    app.generation.current.protection.data.min_pwm_duty = app.generation.current.protection.data.min_pwm_duty + 0.001;
+    if(duty>app.generation.current.wg->protection.data.max_pwm_duty)
+        app.generation.current.wg->protection.data.max_pwm_duty=duty;
+
+    if(duty<app.generation.current.wg->protection.data.min_pwm_duty)
+        app.generation.current.wg->protection.data.min_pwm_duty=duty;
+
+    app.generation.current.wg->protection.data.max_pwm_duty = app.generation.current.wg->protection.data.max_pwm_duty - 0.001;
+    app.generation.current.wg->protection.data.min_pwm_duty = app.generation.current.wg->protection.data.min_pwm_duty + 0.001;
 
 }
 

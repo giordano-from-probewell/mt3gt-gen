@@ -23,8 +23,8 @@ void setupInverter(uint32_t voltage1, uint32_t voltage2,
                    uint16_t pwm_period_ticks,
                    uint16_t pwm_deadband_ticks);
 
-void gen_off(void);
-void gen_on(void);
+void hv_bus_off(void);
+void hv_bus_on(void);
 
 void update_pwm_voltage(float32_t duty);
 void update_pwm_current(float32_t duty);
