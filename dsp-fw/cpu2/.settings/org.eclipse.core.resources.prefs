@@ -80,7 +80,5 @@ encoding//CPU2_FLASH/source/subdir_vars.mk=UTF-8
 encoding//CPU2_FLASH/sources.mk=UTF-8
 encoding//CPU2_FLASH/subdir_rules.mk=UTF-8
 encoding//CPU2_FLASH/subdir_vars.mk=UTF-8
-encoding//source/application/ipc_simple.c=UTF-8
-encoding//source/application/ipc_simple.h=UTF-8
 encoding//source/cli/probewell_ascii.h=UTF-8
 encoding//source/main_cpu2.c=UTF-8

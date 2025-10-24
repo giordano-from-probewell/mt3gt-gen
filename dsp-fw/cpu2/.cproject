@@ -155,7 +155,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="source/application/generation_sm.c|source/application/generation.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_Upp.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_TempSensorConv.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_Spi.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_EQep.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_EPwm.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_Emif.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_ECap.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="source/application/ipc_usage_examples.c|source/application/generation_sm.c|source/application/generation.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_Upp.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_TempSensorConv.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_Spi.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_EQep.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_EPwm.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_Emif.c|source/common_libraries/hardware/f2837x/includes/common/source/F2837xD_ECap.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

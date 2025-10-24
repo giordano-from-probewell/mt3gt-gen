@@ -25,7 +25,7 @@ int16_t cmd_start_current_generation(uint8_t *error_category, uint8_t *error_cod
         return (COMMAND_RESULT__ERROR);
     }
 
-    send_command_to_CPU1(5,NULL);
+    //send_command_to_CPU1(5,NULL);
 
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);

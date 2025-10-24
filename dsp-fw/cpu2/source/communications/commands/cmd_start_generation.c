@@ -7,12 +7,21 @@
 #include "generic_definitions.h"
 #include "types.h"
 #include "commands.h"
+#include "ipc_comm.h"
+#include "ipc_handlers.h"
+#include "cli.h"
 
 #define _CMD_ANSWER_AMOUNT  (1)
 
 #define _CMD_ANSWER         0xB103
 
-
+static void cmd_start_gen_cpu2(void) {
+    uint8_t channel = 0;  // 0 = voltage, 1 = current
+    IPC_SEND_GEN_ENABLE(channel);
+    channel = 1;
+    IPC_SEND_GEN_ENABLE(channel);
+    CLI_LOGI("Voltage nd current gen start sent to CPU1");
+}
 
 int16_t cmd_start_generation(uint8_t *error_category, uint8_t *error_code,uint16_t *command, uint8_t *data, uint16_t *size)
 {
@@ -27,7 +36,7 @@ int16_t cmd_start_generation(uint8_t *error_category, uint8_t *error_code,uint16
         return (COMMAND_RESULT__ERROR);
     }
 
-    send_command_to_CPU1(1,NULL);
+    cmd_start_gen_cpu2();
 
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);

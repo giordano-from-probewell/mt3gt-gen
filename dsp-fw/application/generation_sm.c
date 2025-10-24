@@ -30,6 +30,8 @@ void gen_sm_init(gen_sm_ch_t *ch,
     ch->state = GEN_SM_OFF;
     ch->next_tick_ms = 0;
     ch->scale_cur = 0.f;
+    ch->scale_before_swap = 0.f;
+    ch->waveform_swap_pending = false;
     apply_scale(ch, 0.f);
 
     ch->wg->status.ready_to_generate = false;
@@ -134,13 +136,38 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
         step_ramp_to(ch, ch->wg->config.scale_requested);
         if (ch->scale_cur <= ch->wg->config.scale_requested) {
             if (ch->wg->config.scale_requested == 0.f) {
-                ch->state = GEN_SM_DISARMING;
+                if (ch->waveform_swap_pending) {
+                    ch->state = GEN_SM_WAVEFORM_SWAP;
+                } else {
+                    ch->state = GEN_SM_DISARMING;
+                }
             } else {
                 ch->state = GEN_SM_RUN;
             }
         } else if (ch->wg->config.scale_requested > ch->scale_cur) {
             // Scale request changed direction during ramp
             ch->state = GEN_SM_RAMP_UP;
+        }
+        break;
+
+    case GEN_SM_WAVEFORM_SWAP:
+        // Toggle waveform type between 1 and 2
+        if (ch->wg->ref.type == 1) {
+            ch->wg->ref.type = 2;
+        } else {
+            ch->wg->ref.type = 1;
+        }
+        
+        // Clear the swap pending flag
+        ch->waveform_swap_pending = false;
+        
+        // Request ramp up to previous scale
+        ch->wg->config.scale_requested = ch->scale_before_swap;
+        
+        if (ch->wg->config.scale_requested > 0.f) {
+            ch->state = GEN_SM_RAMP_UP;
+        } else {
+            ch->state = GEN_SM_RUN;
         }
         break;
 
@@ -158,10 +185,17 @@ void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now)
     }
 }
 
-void gen_sm_change_waveform_soft(gen_sm_ch_t *ch, reference_generation_t *new_ref)
+void gen_sm_change_waveform_soft(gen_sm_ch_t *ch)
 {
-    (void)new_ref; // App layer will swap reference safely when scale==0
-    ch->wg->config.scale_requested = 0.f;
-    ch->state = GEN_SM_RAMP_DOWN;
+    // Only allow waveform change if we're running, ramping, or already swapping
+    if (ch->state == GEN_SM_RUN || ch->state == GEN_SM_RAMP_UP || ch->state == GEN_SM_RAMP_DOWN || ch->state == GEN_SM_WAVEFORM_SWAP) {
+        // Save current scale to restore after swap
+        ch->scale_before_swap = ch->wg->config.scale_requested;
+        ch->waveform_swap_pending = true;
+        
+        // Request ramp down to zero
+        ch->wg->config.scale_requested = 0.f;
+        ch->state = GEN_SM_RAMP_DOWN;
+    }
 }
 

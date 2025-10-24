@@ -54,17 +54,8 @@ float32_t refCurrent2[REF_GEN_MAX_SIZE];
 
 #ifdef CPU1
 
-bool flag_new_range = false;
-int8_t new_range = 0;
-
-bool flag_new_calibration = false;
-int8_t new_cal_parameter = 0;
-int8_t new_cal_phase = 0;
-int8_t new_cal_index = 0;
-
-bool flag_start_test = false;
-bool flag_reset_test = false;
-bool flag_reset_metrics = false;
+// NOTE: IPC-related variables have been moved to ipc_handlers.c
+// and are accessible via extern declarations in ipc_handlers.h
 
 static void ipc_sync_cpu1(void)
 {

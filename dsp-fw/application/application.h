@@ -482,17 +482,8 @@ extern float32_t refCurrent2[REF_GEN_MAX_SIZE];
 
 #ifdef CPU1
 
-extern bool flag_new_range;
-extern int8_t new_range;
-
-extern bool flag_new_calibration;
-extern int8_t new_cal_parameter;
-extern int8_t new_cal_phase;
-extern int8_t new_cal_index;
-
-extern bool flag_start_test;
-extern bool flag_reset_test;
-extern bool flag_reset_metrics;
+// NOTE: IPC-related variables have been moved to ipc_handlers.h
+// Include ipc_handlers.h if you need access to these variables
 
 #endif
 

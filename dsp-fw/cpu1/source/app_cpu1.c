@@ -1,25 +1,48 @@
+/**
+ * @file app_cpu1.c
+ * @brief CPU1 Main Application
+ * 
+ * This file contains the main application logic for CPU1, including:
+ * - Voltage and current generation control
+ * - IPC communication with CPU2
+ * - PWM management and SFO timing
+ * - Amplifier control
+ * - CLA and SDFM initialization
+ */
+
 #include "app_cpu1.h"
 
+// System includes
 #include "F28x_Project.h"
 #include "F2837xD_sdfm_drivers.h"
 #include "SFO_V8.h"
+
+// Application includes
 #include "my_time.h"
 #include "gen_cla1_shared.h"
-#include "ipc_simple.h"
+#include "ipc_comm.h"
+#include "ipc_handlers.h"
 #include "frequency.h"
-
+#include "types.h"
+#include "conversions.h"
 #include "amplifier.h"
 #include "generation.h"
 #include "generation_sm.h"
 
-#define TO_CPU1 0
-#define TO_CPU2 1
-#define CONNECT_TO_CLA1 0
-#define CONNECT_TO_DMA 1
-#define CONNECT_TO_CLA2 2
-#define ENABLE 1
-#define DISABLE 0
+// ============================================================================
+// DEFINES AND MACROS
+// ============================================================================
 
+// CPU routing defines
+#define TO_CPU1         0
+#define TO_CPU2         1
+#define CONNECT_TO_CLA1 0
+#define CONNECT_TO_DMA  1
+#define CONNECT_TO_CLA2 2
+#define ENABLE          1
+#define DISABLE         0
+
+// CLA control macros
 #define CPU1_CLA1(x)                        \
         EALLOW;                             \
         DevCfgRegs.DC1.bit.CPU1_CLA1 = x;   \
@@ -28,21 +51,26 @@
         EALLOW;                             \
         DevCfgRegs.DC1.bit.CPU2_CLA1 = x;   \
         EDIS
+
+// Wait macro for timing
 #define WAITSTEP asm(" RPT #255 || NOP")
 
 
+// ============================================================================
+// FUNCTION DECLARATIONS
+// ============================================================================
+
+// Initialization functions
 void _app_gpio_init(void);
-
-
 void _cla1_init(void);
 void _cla1_interruption_config(void);
 void _cla1_memory_config(void);
 void _cla1_link_from_sdfm(void);
 void _sdfm_init(void);
 void generation_init(application_t* app);
-
 generic_status_t _ampops_init(application_t *app);
 
+// Interrupt service routines
 __interrupt void access_violation(void);
 __interrupt void xint1_isr(void);
 __interrupt void _sdfm_isr(void);
@@ -64,26 +92,29 @@ __interrupt void cla1Isr6();
 __interrupt void cla1Isr7();
 __interrupt void cla1Isr8();
 
+// ============================================================================
+// GLOBAL VARIABLES
+// ============================================================================
+
+// System variables
 volatile uint32_t fetchAddress;
+bool flag_zc = false;  // Zero crossing mark
+int c1, p1, l1;        // Temporary variables (consider renaming for clarity)
 
+// PWM management
+// Array of pointers to EPwm register structures
+// Note: ePWM[0] and ePWM[1] both point to EPwm1Regs (index 0 is unused)
+volatile struct EPWM_REGS *ePWM[PWM_CH] = {
+    &EPwm1Regs, &EPwm1Regs, &EPwm2Regs, &EPwm3Regs, &EPwm4Regs,
+    &EPwm5Regs, &EPwm6Regs, &EPwm7Regs, &EPwm8Regs
+};
 
-bool flag_zc = false; //zero crossing mark
-int c1,p1,l1;
+// SFO (Scale Factor Optimizer) for HRPWM
+int MEP_ScaleFactor;  // Global variable used by SFO library
+                      // Result can be used for all HRPWM channels
+                      // This variable is also copied to HRMSTEP register by SFO()
 
-//
-// Array of pointers to EPwm register structures:
-// *ePWM[0] is defined as dummy value not used in the example
-//
-volatile struct EPWM_REGS *ePWM[PWM_CH] =
-             {  &EPwm1Regs, &EPwm1Regs, &EPwm2Regs, &EPwm3Regs, &EPwm4Regs,
-                &EPwm5Regs, &EPwm6Regs, &EPwm7Regs, &EPwm8Regs};
-
-int MEP_ScaleFactor; // Global variable used by the SFO library
-                     // Result can be used for all HRPWM channels
-                     // This variable is also copied to HRMSTEP
-                     // register by SFO() function.
-
-
+// Event counters
 int voltage_event = 0;
 int current_event = 0;
 int voltage_overpower_counter = 0;
@@ -165,8 +196,8 @@ void app_cpu1_init_generation(application_t *app)
 {
     gen_sm_hw_cb_t vhw = { v_pwm_clear_trip, v_pwm_force_trip, v_cla_on, v_cla_off };
     gen_sm_hw_cb_t ihw = { i_pwm_clear_trip, i_pwm_force_trip, i_cla_on, i_cla_off };
-    gen_sm_init(&app->generation.voltage, &app->voltage_wg, &vhw, 50.0f, 20);
-    gen_sm_init(&app->generation.current, &app->current_wg, &ihw, 50.0f, 20);
+    gen_sm_init(&app->generation.voltage, &app->voltage_wg, &vhw, 5.0f, 20); // if feedfoward, it should be higher
+    gen_sm_init(&app->generation.current, &app->current_wg, &ihw, 5.0f, 20);
 
     reference_init(&app->generation.voltage.wg->ref);
     reference_init(&app->generation.current.wg->ref);
@@ -176,7 +207,7 @@ void app_cpu1_init_generation(application_t *app)
     app->generation.current.wg->ref.waveform2 = refCurrent2;
 
     app->generation.current.wg->controller = MODE_FEEDFORWARD;
-    app->generation.voltage.wg->controller = MODE_FEEDFORWARD;
+    app->generation.voltage.wg->controller = MODE_REPETITIVE_FROM_CLA;
 
     //PWM max = 90% PWM min = 10%
     init_protection(&app->generation.voltage.wg->protection,
@@ -210,53 +241,11 @@ void cmd_disable_voltage(void){ gen_sm_request_disable(&app.generation.voltage);
 void cmd_enable_current(void) { gen_sm_request_enable(&app.generation.current); }
 void cmd_disable_current(void){ gen_sm_request_disable(&app.generation.current); }
 
-//todo:
-// void on_protection_trip_voltage(void){ gen_sm_fault(&app.generation.voltage); }
-// void on_protection_trip_current(void){ gen_sm_fault(&app.generation.current); }
+// ============================================================================
+// IPC COMMUNICATION 
+// ============================================================================
+// NOTE: IPC handlers are now implemented in ipc_handlers.c
 
-void ipc_on_cmd_from_cpu2(uint8_t cmd, const uint8_t* payload, uint8_t len)
-{
-    ipc_log_event_from_cpu1(500, cmd, (uint16_t)(my_time(NULL)&0xFFFF));
-}
-
-
-static void handle_ipc_command(uint32_t cmd, float32_t arg)
-{
-    switch (cmd) {
-    case 1:
-        gen_ch_enable(&app.generation.voltage);
-        gen_ch_enable(&app.generation.current);
-        break;
-    case 2:
-        gen_ch_disable(&app.generation.voltage);
-        gen_ch_disable(&app.generation.current);
-        break;
-    case 3:
-        gen_ch_enable(&app.generation.voltage);
-        break;
-    case 4:
-        gen_ch_disable(&app.generation.voltage);
-        break;
-    case 5:
-        gen_ch_enable(&app.generation.current);
-        break;
-    case 6:
-        gen_ch_disable(&app.generation.current);
-        break;
-    case 7: // set scale voltage
-        //gen_ch_set_target(&app.generation.voltage, arg, app.generation.voltage.tgt.waveform_target);
-        break;
-    case 8: // set scale corrente
-        //gen_ch_set_target(&app.generation.current, arg, app.generation.current.tgt.waveform_target);
-        break;
-    case 9: // trocar waveform dos dois (ex.: seno/quadrada etc.)
-        //gen_ch_set_target(&app.generation.voltage, app.generation.voltage.tgt.scale_target, (uint8_t)arg);
-        //gen_ch_set_target(&app.generation.current, app.generation.current.tgt.scale_target, (uint8_t)arg);
-        break;
-    default:
-        break;
-    }
-}
 
 
 
@@ -271,7 +260,8 @@ static void cpu1_start  (application_t *app, my_time_t now)
     uint8_t address=0;
     app->sm_cpu1 = (app_sm_t){ .cur = APP_STATE_START };
 
-    ipc_simple_init_cpu1();
+    ipc_init_cpu1();
+    ipc_handlers_init_cpu1();
 
     _app_gpio_init();
 
@@ -326,14 +316,14 @@ static void cpu1_start  (application_t *app, my_time_t now)
     // HRMSTEP must be populated with a scale factor value prior to enabling
     // high resolution period control.
     //
-       while(app->generation.mep_status == SFO_INCOMPLETE)
-       {
-           app->generation.mep_status = SFO();
-            if(app->generation.mep_status == SFO_ERROR)
-            {
-                error();   // SFO function returns 2 if an error occurs & # of MEP
-            }              // steps/coarse step exceeds maximum of 255.
-       }
+    while(app->generation.mep_status == SFO_INCOMPLETE)
+    {
+        app->generation.mep_status = SFO();
+        if(app->generation.mep_status == SFO_ERROR)
+        {
+            error();   // SFO function returns 2 if an error occurs & # of MEP
+        }              // steps/coarse step exceeds maximum of 255.
+    }
 
 
     //    gen_sm_turning_on();
@@ -422,67 +412,52 @@ static void cpu1_start  (application_t *app, my_time_t now)
 }
 
 
-bool flag_test=false;
 
-bool flag_amp05 = false;
-bool flag_amp1 = false;
-bool flag_amp2 = false;
 
-bool flag_gen1 = false;
-bool flag_gen2 = false;
-bool flag_gen3 = false;
+// NOTE: IPC handlers are now implemented in ipc_handlers.c
+// This removes code duplication and keeps CPU-specific logic separated
 
-float32_t new_scale = 1.0;
+// NOTE: IPC handlers are now configured in ipc_handlers.c
+
+
+// ============================================================================
+// APPLICATION FLAGS AND VARIABLES
+// ============================================================================
+
+// Test flag for IPC example
+bool flag_test = false;
+
+// NOTE: IPC-related variables (flag_start_test, new_scale, etc.) are now declared in ipc_handlers.c
+// and accessible via extern declarations in ipc_handlers.h
 
 
 static void cpu1_running(application_t *app, my_time_t now)
 {
-    ipc_service_cpu1(); //try to send msg to cpu2
-    ipc_rx_service_cpu1(); //treat incoming message from cpu2
+    ipc_process_messages();
+
+
+    // IPC example
+    if (flag_test) {
+        // Play buzzer on CPU2
+        IPC_SEND_BUZZER_PLAY(11);  // Pattern 10
+        flag_test = false;
+    }
+
+    // Send status to CPU2 periodically
+    static my_time_t last_status_time = 0;
+    if ((now - last_status_time) >= 1000) {  // Every 1 second
+        send_status_to_cpu2(app);
+        last_status_time = now;
+    }
+
 
     app_cpu1_generation_tick(now);
 
     amplifier_system_poll(now);
 
-    if(flag_amp1){
-        flag_amp1=false;
-        amplifier_request_gain(AFE_VV1, IN_GAIN_1, OUT_GAIN_1);
-
-    }
-    if(flag_amp05){
-        flag_amp05=false;
-        amplifier_request_gain(AFE_VV1, IN_GAIN_0_5, OUT_GAIN_1);
-
-    }
-    if(flag_amp2){
-        flag_amp2=false;
-        amplifier_request_gain(AFE_VV1, IN_GAIN_2, OUT_GAIN_1);
-    }
-
-    if (flag_test)
-    {
-        ipc_buzzer_play(10);
-        int16_t cmd = 0x12;
-        ipc_log_event_from_cpu1(100/*EVT_IPC_TX 100*/, cmd, (now&0xFFFF));
-        flag_test = false;
-    }
-
-    if(flag_gen1){
-        gen_sm_request_enable(&app->generation.voltage);
-        flag_gen1=false;
-    }
-    if(flag_gen2){
-        gen_sm_request_disable(&app->generation.voltage);
-        flag_gen2=false;
-    }
-    if(flag_gen3){
-        gen_sm_request_scale(&app->generation.voltage, new_scale);
-        flag_gen3=false;
-    }
-
     //TODO: Attention: We had problems, the HRMSTEP calculated here is only one for all PWM`s Channles, but to have a perfect
     // waveform we need different HRMSTEPs. How to have a different HRMSTEP for each channel? We need more tests
-    
+
     // Execute SFO() every 100ms
     static my_time_t last_sfo_time = 0;
     if ((now - last_sfo_time) >= 100)  // 100ms interval
@@ -491,11 +466,72 @@ static void cpu1_running(application_t *app, my_time_t now)
         if (app->generation.mep_status == SFO_ERROR)
         {
             error();   // SFO function returns 2 if an error occurs & # of MEP
-                       // steps/coarse step exceeds maximum of 255.
+            // steps/coarse step exceeds maximum of 255.
         }
         last_sfo_time = now;
     }
 
+}
+
+/**
+ * @brief Example function showing how to send various commands to CPU2
+ * @note This function is not called anywhere - it's for reference only
+ */
+void send_commands_to_cpu2(void) {
+    // Simple commands using macros
+    IPC_SEND_BUZZER_PLAY(5);        // Play boot ok sound
+    IPC_SEND_BUZZER_STOP();         // Stop buzzer
+
+    // Commands with parameters
+    IPC_SEND_GEN_ENABLE(0x01);      // Enable channel 0
+
+    // Custom commands
+    uint8_t custom_data[] = {0x12, 0x34, 0x56};
+    ipc_send_raw_cmd(0x80, custom_data, 3);
+}
+
+void send_status_to_cpu2(application_t *app) {
+    // Send system status to CPU2
+    uint8_t status_data[6];
+    status_data[0] = app->sm_cpu1.cur;                       // State machine state
+    status_data[1] = app->generation.voltage.wg->status.generating ? 1 : 0;  // Generation status
+    status_data[2] = (uint8_t)(app->generation.voltage.wg->config.scale * 100);  // Scale %
+    status_data[3] = 0;  // Reserved
+    status_data[4] = 0;  // Reserved  
+    status_data[5] = 0;  // Simple checksum
+
+    for (int i = 0; i < 5; i++) {
+        status_data[5] ^= status_data[i];
+    }
+
+    ipc_send_system_cmd(IPC_CMD_STATUS_REQUEST, status_data, 6);
+}
+
+
+/**
+ * @brief Monitor IPC communication health and statistics
+ * @note This function is not called anywhere - it's for reference only
+ */
+void check_ipc_health(void) {
+    static my_time_t last_check = 0;
+    my_time_t now = my_time(NULL);
+
+    if ((now - last_check) >= 5000) {  // Every 5 seconds
+        if (!ipc_is_communication_ok()) {
+            // Communication problems
+            // Retry initialization or signal error
+           //error_set(ERROR_IPC_COMMUNICATION);
+        }
+
+        // Log statistics (optional)
+        uint32_t sent = ipc_get_messages_sent();
+        uint32_t received = ipc_get_messages_received();
+        uint32_t errors = ipc_get_communication_errors();
+
+        // Do something with the statistics...
+
+        last_check = now;
+    }
 }
 
 static void cpu1_error  (application_t *app, my_time_t now)
@@ -1010,18 +1046,20 @@ void _cla1_memory_config(void)
     MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS0 = 1;
     MemCfgRegs.LSxMSEL.bit.MSEL_LS1 = 1;
     MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS1 = 1;
-    MemCfgRegs.LSxMSEL.bit.MSEL_LS2 = 1;
-    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS2 = 1;
+
 
     //
-    // Select LS5 to be data RAM for the CLA
+    // Select LS to be data RAM for the CLA
     //
-    MemCfgRegs.LSxMSEL.bit.MSEL_LS3 = 1;     // LS3RAM is shared between CPU and CLA
-    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS3 = 0; // LS3RAM setup as data memory
-    MemCfgRegs.LSxMSEL.bit.MSEL_LS4 = 1;     // LS2RAM is shared between CPU and CLA
-    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS4 = 0; // LS2RAM setup as data memory
-    MemCfgRegs.LSxMSEL.bit.MSEL_LS5 = 1;     // LS3RAM is shared between CPU and CLA
-    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS5 = 0; // LS3RAM setup as data memory
+    MemCfgRegs.LSxMSEL.bit.MSEL_LS2 = 1;
+    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS2 = 0;
+    MemCfgRegs.LSxMSEL.bit.MSEL_LS3 = 1;
+    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS3 = 0;
+    MemCfgRegs.LSxMSEL.bit.MSEL_LS4 = 1;
+    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS4 = 0;
+    MemCfgRegs.LSxMSEL.bit.MSEL_LS5 = 1;
+    MemCfgRegs.LSxCLAPGM.bit.CLAPGM_LS5 = 0;
+
 
     // Detect any CLA fetch access violations, enable
     // interrupt for it (TRM SPRUHM8, 2.11.1.7.4 & 2.14.18)

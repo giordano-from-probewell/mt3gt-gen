@@ -176,8 +176,8 @@ SECTIONS
                        LOAD_SIZE(_Cla1ProgLoadSize),
                        PAGE = 0, ALIGN(8)
 
-   .scratchpad		:> RAMLS_CLA1_DATA,								PAGE = 1
-   .bss_cla		    :> RAMLS_CLA1_DATA,								PAGE = 1
+   .scratchpad		:> RAMLS_CLA1_DATA,							PAGE = 1
+   .bss_cla		    :> RAMLS_CLA1_DATA,							PAGE = 1
    .const_cla	    :  LOAD = FLASHB,
                        RUN  = RAMLS_CLA1_DATA,
                        RUN_START(_Cla1ConstRunStart),
@@ -185,7 +185,7 @@ SECTIONS
                        LOAD_SIZE(_Cla1ConstLoadSize),
                        PAGE = 1, ALIGN(8)
 
-	Cla1DataRam     :> RAMLS_CLA1_DATA, 								PAGE = 1, ALIGN(8)
+	Cla1DataRam     :> RAMLS_CLA1_DATA, 						PAGE = 1, ALIGN(8)
 
 //	CLA1mathTables : LOAD = FLASHH,    PAGE = 0
 //                 RUN = RAMLS5,      PAGE = 1

@@ -39,7 +39,7 @@ int16_t cmd_set_scale_current(uint8_t *error_category, uint8_t *error_code,uint1
     if( tmp.value >= CURRENT_MAX )
             tmp.value = CURRENT_MAX;
 
-    send_command_to_CPU1(8, tmp.value);
+    //send_command_to_CPU1(8, tmp.value);
 
 
 

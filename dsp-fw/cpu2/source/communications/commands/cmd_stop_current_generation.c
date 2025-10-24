@@ -26,7 +26,7 @@ int16_t cmd_stop_current_generation(uint8_t *error_category, uint8_t *error_code
     }
 
 
-    send_command_to_CPU1(6,NULL);
+   // send_command_to_CPU1(6,NULL);
 
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);

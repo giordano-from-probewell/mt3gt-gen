@@ -7,12 +7,19 @@
 #include "generic_definitions.h"
 #include "types.h"
 #include "commands.h"
+#include "ipc_comm.h"
+#include "ipc_handlers.h"
+#include "cli.h"
 
 #define _CMD_ANSWER_AMOUNT  (1)
 
 #define _CMD_ANSWER         0xB001
 
-
+static void cmd_stop_voltage_gen_cpu2(void) {
+    uint8_t channel = 0;  // 0 = voltage, 1 = current
+    IPC_SEND_GEN_DISABLE(channel);
+    CLI_LOGI("Voltage gen stop sent to CPU1");
+}
 
 int16_t cmd_stop_voltage_generation(uint8_t *error_category, uint8_t *error_code,uint16_t *command, uint8_t *data, uint16_t *size)
 {
@@ -26,7 +33,7 @@ int16_t cmd_stop_voltage_generation(uint8_t *error_category, uint8_t *error_code
         return (COMMAND_RESULT__ERROR);
     }
 
-    send_command_to_CPU1(4,NULL);
+    cmd_stop_voltage_gen_cpu2();
 
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);

@@ -424,7 +424,7 @@ void buzzer_state_machine(my_time_t time_actual)
 
 #elif defined(CPU1)
 
-#include "ipc_simple.h"
+#include <ipc_simple_h>
 
 void buzzer_enqueue_pattern(uint8_t* pattern_id)
 {

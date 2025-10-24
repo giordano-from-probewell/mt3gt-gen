@@ -19,6 +19,7 @@ typedef enum {
     GEN_SM_RAMP_UP,     /**< Ramping scale_cur -> scale_requested */
     GEN_SM_RUN,         /**< Steady state at requested scale */
     GEN_SM_RAMP_DOWN,   /**< Ramping to zero before disarm or waveform swap */
+    GEN_SM_WAVEFORM_SWAP, /**< At zero, swapping waveform type */
     GEN_SM_DISARMING,   /**< Forcing trip, disabling CLA/control */
     GEN_SM_FAULT        /**< Faulted; requires external reset to OFF */
 } gen_sm_state_t;
@@ -26,7 +27,7 @@ typedef enum {
 /**
  * @brief Hardware callback set for one channel.
  *
- * Keep these very short and deterministic — called in the main loop tick.
+ * Keep these very short and deterministic ï¿½ called in the main loop tick.
  */
 typedef struct {
     void (*pwm_clear_trip)(void);  /**< Clear OST for both half-bridges of this channel */
@@ -49,6 +50,10 @@ typedef struct gen_sm_ch_st {
     // Ramp control
     float32_t ramp_slew;         /**< Increment per tick in [0..1] (normalized scale units) */
     float32_t scale_cur;         /**< Mirror of the applied scale (wg->config.scale) */
+
+    // Waveform swap control
+    float32_t scale_before_swap; /**< Scale to restore after waveform swap */
+    bool waveform_swap_pending;  /**< Flag indicating waveform swap is requested */
 
     // Simple scheduling (ms)
     my_time_t next_tick_ms;      /**< Next eligible time for a tick */
@@ -98,13 +103,13 @@ void gen_sm_fault(gen_sm_ch_t *ch);
 void gen_sm_tick(gen_sm_ch_t *ch, my_time_t now);
 
 /**
- * @brief Soft waveform change helper:
- *        ramps down to zero, then the application can swap references,
- *        and finally caller can request enable/scale again.
+ * @brief Request a "soft" waveform change: ramp down -> swap -> ramp up.
  *
- * NOTE: This does not swap references itself (that belongs to the app layer).
+ * This asks the FSM to ramp down to zero, toggle the waveform type between 
+ * 1 and 2, then ramp back up to the previous scale.
+ *
+ * The waveform type alternates automatically between 1 and 2 on each call.
  */
-void gen_sm_change_waveform_soft(gen_sm_ch_t *ch,
-                                 reference_generation_t *new_ref);
+void gen_sm_change_waveform_soft(gen_sm_ch_t *ch);
 
 #endif // GENERATION_SM_H

@@ -33,7 +33,7 @@ int16_t cmd_set_frequency(uint8_t *error_category, uint8_t *error_code,uint16_t 
     if( tmp.value <= FREQUENCY_MIN )
             tmp.value = FREQUENCY_MAX;
 
-    send_command_to_CPU1(9, tmp.value);
+    //send_command_to_CPU1(9, tmp.value);
 
     *error_category = ERROR(ERROR_CATEGORY_NONE);
     *error_code = ERROR(ERROR_CODE_NONE);

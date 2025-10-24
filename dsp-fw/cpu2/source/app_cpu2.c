@@ -1,23 +1,39 @@
-#include "app_cpu2.h"
+/**
+ * @file app_cpu2.c
+ * @brief CPU2 Main Application - Handles CLI, Communications, Buzzer and IPC coordination
+ * @version 1.0
+ * @date 2025-10-22
+ */
+
+// ============================================================================
+// INCLUDES
+// ============================================================================
+
+// System includes
 #include <stdio.h>
 
+// Application includes
+#include "app_cpu2.h"
 #include "my_time.h"
 #include "buzzer.h"
 #include "cli.h"
 #include "communications.h"
-#include "ipc_simple.h"
+#include "ipc_comm.h"
+#include "ipc_handlers.h"
 #include "log.h"
 
 
 
 
 
-/////////////////////////// LOG TEST ////////////////////////////////////////////
+// ============================================================================
+// LOG SYSTEM CONFIGURATION
+// ============================================================================
 
 /*static*/ log_handle_t g_log;
 
 
-/* simple in-RAM array simulating EEPROM region */
+// Simple in-RAM array simulating EEPROM region
 #ifndef LOG_RAM_BYTES
 #define LOG_RAM_BYTES  (2u*1024u)
 #endif
@@ -192,7 +208,9 @@ static void cpu2_start  (application_t *app, my_time_t now)
     *(app->sm_cpu2) = (app_sm_t){ .cur = APP_STATE_START };
 
 
-    ipc_simple_init_cpu2();
+    ipc_init_cpu2();
+    // Registrar handlers customizados
+    ipc_handlers_init_cpu2();
 
     cli_init ();
 
@@ -218,22 +236,130 @@ static void cpu2_start  (application_t *app, my_time_t now)
     (void)log_init(&g_log, st, /*base_addr=*/0, /*max_logs=*/(4096 - sizeof(log_header_disk_t))/LOG_SLOT_BYTES);
 }
 
+// ============================================================================
+// IPC COMMUNICATION HANDLERS
+// ============================================================================
 
+// Handler to receive status from CPU1
+bool handle_status_from_cpu1(const uint8_t* payload, uint8_t len) {
+    if (len < 6) return false;
 
-bool flag_test=false;
+    uint8_t cpu1_state = payload[0];
+    uint8_t generation_active = payload[1];
+    uint8_t scale_percent = payload[2];
+
+    // Verify checksum
+    uint8_t checksum = 0;
+    for (int i = 0; i < 5; i++) {
+        checksum ^= payload[i];
+    }
+
+    if (checksum != payload[5]) {
+        // Invalid checksum
+        return false;
+    }
+
+    // Process received status
+    CLI_LOGI("CPU1 Status: State=%d, Gen=%d, Scale=%d%%",
+             cpu1_state, generation_active, scale_percent);
+
+    // Update local variables or send via communication
+    // ...
+
+    return true;
+}
+
+// Handler for control commands from CPU1
+bool handle_control_from_cpu1(const uint8_t* payload, uint8_t len) {
+    if (len < 1) return false;
+
+    uint8_t cmd = payload[0];
+
+    switch (cmd) {
+    case 0: // Reset system
+        // Implement reset
+        CLI_LOGI("Reset command from CPU1");
+        break;
+    case 1: // Change mode
+        if (len >= 2) {
+            uint8_t new_mode = payload[1];
+            CLI_LOGI("Mode change to %d from CPU1", new_mode);
+        }
+        break;
+    default:
+        return false;
+    }
+    return true;
+}
+
+// Custom buzzer handler (overrides default)
+bool handle_buzzer_custom(const uint8_t* payload, uint8_t len) {
+    if (len < 1) return false;
+
+    uint8_t pattern = payload[0];
+
+    CLI_LOGI("Buzzer play pattern %d from CPU1", pattern);
+
+    // Custom buzzer implementation
+    const note_t* song = NULL;
+    switch (pattern) {
+    case 0: song = comm_ok; break;
+    case 1: song = comm_error; break;
+    case 2: song = warning_beep; break;
+    case 3: song = event_beep; break;
+    case 4: song = event_led_beep; break;
+    case 5: song = boot_ok; break;
+    case 6: song = boot_fail; break;
+    case 7: song = std_boot_ok; break;
+    case 8: song = gen_a_boot_ok; break;
+    case 9: song = gen_b_boot_ok; break;
+    case 10: song = gen_c_boot_ok; break;
+    case 11: song = mario_theme; break;
+    case 12: song = star_wars; break;
+    default: song = event_beep; break;
+    }
+
+    if (song) {
+        buzzer_enqueue(song);
+    }
+
+    return true;
+}
+
+// NOTE: IPC handlers are now configured in ipc_handlers.c
+
+// ============================================================================
+// APPLICATION FLAGS AND VARIABLES
+// ============================================================================
+
+// Test flags
+bool flag_test = false;
 bool flag_cli_log = false;
 
 
+// ============================================================================
+// MAIN APPLICATION LOOP
+// ============================================================================
+
 static void cpu2_running(application_t *app, my_time_t now) {
+    // Process IPC messages (already called automatically by ISR,
+    // but can call here too for safety)
+    ipc_process_messages();
     cli_processing(now);
     comm_processing(now);
     buzzer_state_machine(now);
 
 
+    // Example: Send commands to CPU1 based on CLI
+    process_cli_to_ipc_commands();
+
+    // Example: Monitor communication
+    monitor_ipc_health();
+
     if(flag_test){
         flag_test = false;
-        int payload = 0xcd;
-        ipc_enqueue_to_cpu1(0xab,&payload,1 );    // enfileira
+        uint8_t payload = 0xcd;
+        ipc_send_raw_cmd(0xab, &payload, 1);    // Use the new IPC system
 
     }
 
@@ -247,7 +373,126 @@ static void cpu2_running(application_t *app, my_time_t now) {
 
 }
 
-static void cpu2_error  (application_t *app, my_time_t now)
+// ============================================================================
+// CLI TO IPC COMMAND EXAMPLES 
+// ============================================================================
+
+/**
+ * @brief Example function showing how to send commands to CPU1 from CLI
+ * @note This function is not called anywhere - it's for reference only
+ */
+void send_commands_to_cpu1_from_cli(void) {
+
+    // Generation commands
+    IPC_SEND_GEN_ENABLE(0x03);      // Enable channels 0 and 1
+    IPC_SEND_GEN_DISABLE(0x01);     // Disable channel 0
+    IPC_SEND_GEN_CHANGE_WAVEFORM(0); // Change waveform of channel 0
+}
+
+// CLI command flags
+bool cli_flag_gen_enable = false;
+float cli_new_scale = 1.0f;
+
+// Process CLI commands that should be sent to CPU1
+void process_cli_to_ipc_commands(void) {
+    // Example: If user typed command in CLI, send to CPU1
+    static bool last_gen_enable = false;
+
+    if (cli_flag_gen_enable && !last_gen_enable) {
+        // User requested to enable generation
+        uint8_t gen_cmd[] = {0, 1};  // Enable voltage + current
+        ipc_send_generation_cmd(IPC_CMD_GEN_ENABLE, gen_cmd, 2);
+        last_gen_enable = true;
+    }
+
+    if (!cli_flag_gen_enable) {
+        last_gen_enable = false;
+    }
+
+    // Exemplo: Enviar scale personalizado
+    static float last_scale = -1.0f;
+    if (cli_new_scale != last_scale) {
+        uint8_t scale_cmd[5];
+        scale_cmd[0] = 0;  // Canal 0 (voltage)
+        memcpy(&scale_cmd[1], &cli_new_scale, sizeof(float));
+        ipc_send_generation_cmd(IPC_CMD_GEN_SET_SCALE, scale_cmd, 5);
+        last_scale = cli_new_scale;
+    }
+}
+
+// ============================================================================
+// 5. COMANDOS CLI QUE CONTROLAM CPU1 VIA IPC
+// ============================================================================
+
+// Comando CLI: "gen enable"
+void cli_cmd_gen_enable(void) {
+    IPC_SEND_GEN_ENABLE(0x01);  // Habilitar canal 0
+    CLI_LOGI("Generation enable sent to CPU1");
+}
+
+// Comando CLI: "gen disable"
+void cli_cmd_gen_disable(void) {
+    IPC_SEND_GEN_DISABLE(0x01);  // Desabilitar canal 0
+    CLI_LOGI("Generation disable sent to CPU1");
+}
+
+// Comando CLI: "gen scale <value>"
+// EXEMPLO DE USO:
+// Para chamar no CLI, você pode:
+// 1. Usar via variável global: cli_new_scale = 1.5f; (depois será processado automaticamente)
+// 2. Chamar diretamente: cli_cmd_gen_scale(1.5f);
+// 3. Integrar com parser de comando de texto se disponível
+void cli_cmd_gen_scale(float scale) {
+    uint8_t payload[5];
+    payload[0] = 0;  // Canal 0
+    memcpy(&payload[1], &scale, sizeof(float));
+
+    ipc_send_generation_cmd(IPC_CMD_GEN_SET_SCALE, payload, 5);
+    CLI_LOGI("Generation scale %.2f sent to CPU1", scale);
+}
+
+// CLI Command: "gen wave"
+void cli_cmd_gen_waveform(void) {
+    IPC_SEND_GEN_CHANGE_WAVEFORM(0);  // Change waveform of channel 0
+    CLI_LOGI("Waveform change sent to CPU1");
+}
+
+
+
+// ============================================================================
+// MONITORING AND DIAGNOSTICS
+// ============================================================================
+
+/**
+ * @brief Monitor IPC communication health and log statistics
+ */
+void monitor_ipc_health(void) {
+    static uint32_t last_check = 0;
+    uint32_t now = 0;//get_time_ms();  // Your time function
+
+    if ((now - last_check) >= 10000) {  // Every 10 seconds
+        // Check communication health
+        if (!ipc_is_communication_ok()) {
+            CLI_LOGE("IPC communication error!");
+        }
+
+        // Log statistics
+        uint32_t sent = ipc_get_messages_sent();
+        uint32_t received = ipc_get_messages_received();
+        uint32_t errors = ipc_get_communication_errors();
+
+        CLI_LOGI("IPC Stats: TX=%lu, RX=%lu, ERR=%lu", sent, received, errors);
+
+        last_check = now;
+    }
+}
+
+
+// ============================================================================
+// APPLICATION STATE MACHINE
+// ============================================================================
+
+static void cpu2_error(application_t *app, my_time_t now)
 {
     //TODO: error handling
 }
@@ -268,7 +513,6 @@ void app_init_cpu2(application_t *app)
 void app_run_cpu2(application_t *app) {
 
     my_time_t now = my_time(NULL);
-    ipc_service_cpu2();          // send when doorbell is free
     CPU2_HANDLERS[(app->sm_cpu2)->cur](app, now);
 
 }

@@ -90,11 +90,6 @@ extern int16_t cmd_gpio1_set                    (uint8_t *error_category,uint8_t
 
 
 
-#define IPC_FLAG_ADDR       0x3F800 //2 bytes for flag
-#define IPC_CMD_ADDR        0x3F802  //command (int32)
-#define IPC_PAYLOAD_ADDR    0x3F806  //payload
-
-void send_command_to_CPU1(uint32_t command, float32_t payload);
 
 
 #endif
